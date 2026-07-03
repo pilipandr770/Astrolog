@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<style>
+    @page {
+        size: A4;
+        margin: 2.5cm 2cm;
+        @bottom-center {
+            content: "Lal Kitab Auswertung — Seite " counter(page) " von " counter(pages);
+            font-size: 9px;
+            color: #999;
+        }
+    }
+    body {
+        font-family: 'Georgia', serif;
+        color: #2b2320;
+        line-height: 1.6;
+    }
+    h1 {
+        font-size: 26px;
+        color: #6b3f1d;
+        border-bottom: 2px solid #c9963f;
+        padding-bottom: 10px;
+    }
+    h2 {
+        font-size: 17px;
+        color: #6b3f1d;
+        margin-top: 28px;
+    }
+    .meta {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 24px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0 20px 0;
+        font-size: 12px;
+    }
+    th, td {
+        text-align: left;
+        padding: 6px 10px;
+        border-bottom: 1px solid #e5ddd0;
+    }
+    th {
+        background: #f7f1e6;
+        color: #6b3f1d;
+    }
+    .finding {
+        margin-bottom: 14px;
+        padding: 10px 14px;
+        border-left: 3px solid #c9963f;
+        background: #faf6ee;
+    }
+    .finding-title { font-weight: bold; color: #6b3f1d; }
+    .remedy { font-style: italic; font-size: 12px; color: #555; margin-top: 4px; }
+    .interpretation { white-space: pre-line; font-size: 13px; }
+    .disclaimer {
+        margin-top: 40px;
+        font-size: 10px;
+        color: #999;
+        border-top: 1px solid #e5ddd0;
+        padding-top: 10px;
+    }
+</style>
+</head>
+<body>
+    <h1>Deine Lal-Kitab-Auswertung</h1>
+    <div class="meta">
+        Geburtsdatum: {{ birth_data.get('date') }} · Geburtszeit: {{ birth_data.get('time') }}
+        · Geburtsort: {{ birth_data.get('place') }}
+    </div>
+
+    <h2>Planetenpositionen</h2>
+    <table>
+        <tr><th>Planet</th><th>Zeichen</th><th>Haus</th></tr>
+        {% for name, data in houses.items() %}
+        <tr>
+            <td>{{ name }}</td>
+            <td>{{ data.sign }}</td>
+            <td>{{ data.house }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>Lal-Kitab-Befunde</h2>
+    {% for f in findings %}
+    <div class="finding">
+        <div class="finding-title">{{ f.title }}</div>
+        <div>{{ f.description }}</div>
+        {% if f.remedy %}<div class="remedy">Empfehlung: {{ f.remedy }}</div>{% endif %}
+    </div>
+    {% else %}
+    <p>Keine spezifischen Befunde für diese Karte.</p>
+    {% endfor %}
+
+    <h2>Deine persönliche Auswertung</h2>
+    <div class="interpretation">{{ interpretation_text }}</div>
+
+    <div class="disclaimer">
+        Diese Auswertung dient der Unterhaltung und Selbstreflexion und ersetzt
+        keine medizinische, rechtliche oder finanzielle Beratung.
+    </div>
+</body>
+</html>

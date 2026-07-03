@@ -1,0 +1,57 @@
+{% extends "admin_base.html" %}
+{% block title %}Übersicht{% endblock %}
+{% block content %}
+<h1>Übersicht</h1>
+
+<div class="card">
+  <h2 style="margin-top:0;">Zahlungen</h2>
+  <div class="stat-grid">
+    <div class="stat">
+      <div class="value">{{ stats.total_conversations }}</div>
+      <div class="label">Gespräche gesamt</div>
+    </div>
+    <div class="stat">
+      <div class="value">{{ stats.paid_count }}</div>
+      <div class="label">Bezahlte Berichte</div>
+    </div>
+    <div class="stat">
+      <div class="value">{% if revenue is not none %}{{ "%.2f"|format(revenue) }} €{% else %}—{% endif %}</div>
+      <div class="label">Umsatz (geschätzt, {{ report_price }} €/Bericht)</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Gespräche nach Status</h2>
+  <table>
+    <tr><th>Status</th><th>Anzahl</th></tr>
+    {% for state, count in stats.by_state.items() %}
+    <tr><td>{{ state }}</td><td>{{ count }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Letzte bezahlte Berichte</h2>
+  {% if stats.recent_paid %}
+  <table>
+    <tr><th>Telefon</th><th>Geburtsort</th><th>Zuletzt aktualisiert</th></tr>
+    {% for row in stats.recent_paid %}
+    <tr><td>{{ row.phone }}</td><td>{{ row.birth_place or "—" }}</td><td>{{ row.updated_at }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p>Noch keine bezahlten Berichte.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">WhatsApp-Nummer verbinden / wechseln</h2>
+  {% if evolution_manager_url %}
+  <p>Verwaltung der WhatsApp-Verbindung (QR-Code) läuft über den Evolution-API-Manager:</p>
+  <a class="btn" href="{{ evolution_manager_url }}" target="_blank" rel="noopener">Evolution Manager öffnen</a>
+  {% else %}
+  <p>EVOLUTION_MANAGER_URL ist nicht gesetzt — trag die URL deines Evolution-API-Manager-Interfaces in die .env ein.</p>
+  {% endif %}
+</div>
+{% endblock %}

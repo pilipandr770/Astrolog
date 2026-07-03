@@ -1,0 +1,16 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+data/
+.pytest_cache/
+tests/
+.env
+# Rohdaten für die Lal-Kitab-Regelextraktion (Scans, Rohtext) — nur für
+# die Entwicklung der YAML-Regeln gebraucht, nicht zur Laufzeit. Die
+# YAML-Dateien selbst (docs/lal_kitab_rules.yaml, docs/lal_kitab_rin.yaml)
+# werden NICHT ausgeschlossen, die lädt lal_kitab.py zur Laufzeit.
+docs/lal_kitab_source/

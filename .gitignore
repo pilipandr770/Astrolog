@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.env
+data/
+.pytest_cache/
+ephe/*.se1
+
+# Скан/текст первоисточников (копирайт книг) — только локально, не в git.
+# Итоговые правила уже переработаны и лежат в docs/lal_kitab_rules.yaml /
+# docs/lal_kitab_rin.yaml, которые ОСТАЮТСЯ в репозитории.
+docs/lal_kitab_source/

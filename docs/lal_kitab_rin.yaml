@@ -1,0 +1,198 @@
+# Rin (кармические долги) — Chapter 6 первоисточника (Goswami 1952, "Debts/
+# Complicated Planets", pp. 132-145). Структурно ОТЛИЧАЕТСЯ от
+# lal_kitab_rules.yaml: там правило = "планета в доме", здесь правило =
+# "планета в доме + враждебная планета в другом доме" — обнаружение долга,
+# а не трактовка одиночной позиции. См. docs/LAL_KITAB_NOTES.md.
+#
+# Общий принцип из первоисточника: грех предков/себя отражается на
+# определённой планете, попавшей "в корень" (root) враждебной планеты —
+# симптом виден по всей линии семьи (дед/отец/сын/брат), и требует общего
+# для всей кровной линии ремедия (складчина всех кровных родственников).
+#
+# ВАЖНО: detect_rin() в app/services/lal_kitab.py ещё не реализована — это
+# следующий шаг. Условия здесь описывают "планета X в одном из house_any +
+# любая из enemy_planets в root_house" — программно проверяемо (в отличие
+# от многих benefit/malefic_effects из lal_kitab_rules.yaml), но требует
+# отдельной функции сопоставления, а не переиспользования analyze().
+
+debts:
+  - id: father_debt_jupiter
+    planet: Jupiter
+    house_any: [2, 5, 9, 12]
+    enemy_planets: [Venus, Mercury]
+    debt_type: "Pitra Rin (Father's Debt)"
+    cause: >
+      Sin of elders — family priest changed due to childlessness or
+      family enmity; a neighbourhood temple or Jupiter-related item
+      (e.g. a peepal tree) destroyed or being destroyed.
+    symptoms: >
+      As the man's hair greys then whitens, his fortune dwindles in step
+      (gold -> copper -> rusted iron); respect turns to unearned
+      humiliation; completed work bears no fruit; whooping cough;
+      headaches from the very source (forehead) that should bring luck.
+    remedy: >
+      Collect one rupee from every blood relative and donate it together
+      at a temple in one day. Worship/respect a temple or peepal tree
+      within 16 paces of the house's left exit, if present.
+    source: "Goswami 1952, Chapter 6, pp. 132-138"
+
+  - id: personal_debt_sun
+    planet: Sun
+    house_any: [5]
+    enemy_planets: [Venus, Rahu, Ketu]
+    debt_type: "Personal Debt (via Sun)"
+    cause: "Atheism; ridiculing old rituals."
+    symptoms: >
+      An underground fireplace in the house, or a light-well in the
+      roof; disfavour from authorities as youth begins; litigation, loan
+      recovery, conviction without fault through to age 48; relief only
+      arrives when a child/grandchild reaches 11 months or 11 years.
+    remedy: "Perform a Yagna funded by equal joint shares of all blood relatives."
+    source: "Goswami 1952, Chapter 6, pp. 133-139"
+
+  - id: mother_debt_moon
+    planet: Moon
+    house_any: null  # ПРОБЕЛ В ДАННЫХ: колонка "Placement in House No." для
+      # Moon не сохранилась при разборе таблицы (сбитая OCR-таблица, см.
+      # общий комментарий об этом явлении в LAL_KITAB_NOTES.md). Нужно
+      # свериться с оригиналом книги, прежде чем использовать это правило
+      # программно — house_any здесь НЕ должен трактоваться как "любой дом".
+    enemy_planets: [Ketu]
+    debt_type: "Matri Rin (Mother's Debt)"
+    cause: >
+      Mother was a victim of bad intentions — separated from the house
+      out of ill feeling, or neglected while ill.
+    symptoms: >
+      Dumping dirty material in a roof light-well, or neglecting a
+      neighbouring well/river/pool instead of honouring it; loss of
+      silver, water, peace of mind, night's rest, income and milch stock;
+      friends'/relatives' help fails to arrive.
+    remedy: "Collect an equal share of silver from every blood relative and flow it into a river on the same day."
+    source: "Goswami 1952, Chapter 6, pp. 133-139"
+
+  - id: wife_debt_venus
+    planet: Venus
+    house_any: [2, 7]
+    enemy_planets: [Sun, Rahu, Moon]
+    debt_type: "Stri Rin (Debt to Wife)"
+    cause: "Beating a wife, or ending a pregnancy through some deception."
+    symptoms: >
+      Rearing toothed animals (particularly cows) in the house while
+      harbouring family hatred; a pompous marriage fails to produce a
+      male child; skin diseases (e.g. leprosy) or mourning mar the
+      marriage; cow and mother 'bellow' at night; the couple is pitied.
+    remedy: "Feed 100 unblemished cows delicious food in one day, funded jointly and equally by the whole family."
+    source: "Goswami 1952, Chapter 6, pp. 134-139"
+
+  - id: relations_debt_mars
+    planet: Mars
+    house_any: [1, 8]
+    enemy_planets: [Mercury, Ketu]
+    debt_type: "Debt to Relations (via Mars)"
+    cause: >
+      Killing friends, causing poison/fire in a full-blown field, having
+      a buffalo killed, or torching a house.
+    symptoms: >
+      Hatred of meeting relatives, or avoiding/hating children's
+      birthdays and family functions; mysterious fires; sudden death or
+      ruin among those who seem helpful, especially ages 28-36; no
+      doctor can diagnose the cause.
+    remedy: >
+      Collect one rupee from each blood relative and give a portion of
+      Saturn-linked work (artisan, experienced Hakim, house-builder) for
+      free to such a person.
+    source: "Goswami 1952, Chapter 6, pp. 134-142"
+
+  - id: daughter_sister_debt_mercury
+    planet: Mercury
+    house_any: [3, 6]
+    enemy_planets: [Moon]
+    debt_type: "Debt to Daughter & Sister (via Mercury)"
+    cause: >
+      Verbal deception; killing someone's daughter/sister; committing
+      atrocities; selling an innocent infant or trading in misguided
+      children.
+    symptoms: >
+      A daughter's birth brings celebration, but the father later senses
+      an unknown misfortune destroying his wealth; the mother laments
+      nightly; ~75% of yearly savings lost by year's end; wealth lost
+      though lives are spared; the "secret" cause is never identified,
+      even after years of effort (ages 28-48).
+    remedy: >
+      Collect one yellow shell from each blood relative, burn them to
+      dust, and flow the ashes into a river the same day.
+    source: "Goswami 1952, Chapter 6, pp. 135-143"
+
+  - id: atrocious_debt_saturn
+    planet: Saturn
+    house_any: [10, 11]
+    enemy_planets: [Sun, Moon, Mars]
+    debt_type: "Atrocious Debt (via Saturn)"
+    cause: >
+      Killing a living being; taking a house or Saturn-related property
+      by deceit or without payment.
+    symptoms: >
+      A south-facing house, or one built on land taken from a childless
+      person or over filled-in wells/roads; fires, snakebites, injuries;
+      newly built houses bring no comfort — sometimes the builder dies
+      the first night he sleeps there; unjust conflicts with police/
+      officials/educational authorities; a competent person inexplicably
+      humiliated or fails exams; family fortune dwindles in these houses.
+    remedy: >
+      Feed 100 fish (across various places) in one day, or feed 100
+      labourers, funded jointly and equally by the whole family.
+    source: "Goswami 1952, Chapter 6, pp. 135-143"
+
+  - id: unborn_debt_rahu
+    planet: Rahu
+    house_any: [12]
+    enemy_planets: [Sun, Venus, Mars]
+    debt_type: "Debt to the Unborn (via Rahu)"
+    cause: >
+      Deceiving associates/in-laws in a way that destroys their
+      families.
+    symptoms: >
+      Sewerage or an abandoned funeral ground below the exit threshold,
+      or a grain-roasting shop along the south wall; sudden fires/theft/
+      embezzlement destroy wealth; in-laws or those aged 16-21 suffer
+      head injuries, disease, premature signs of aging; unexplained
+      asthma, epilepsy, breathing trouble, imprisonment without fault;
+      fines/compensation imposed regardless of fault.
+    remedy: "Collect one coconut from each blood relative and flow them into a river in one day."
+    source: "Goswami 1952, Chapter 6, pp. 136-144"
+
+  - id: gods_nature_debt_ketu
+    planet: Ketu
+    house_any: [6]
+    enemy_planets: [Moon]
+    debt_type: "Debt to Gods/Nature (via Ketu)"
+    cause: >
+      Ill-intended cruelty toward a dog or beggar that ruins them
+      ruthlessly; killing dogs without reason, or otherwise destroying
+      Ketu-related things/beings.
+    symptoms: >
+      A chain of accidental child deaths (dog bite, road accident, fall,
+      drowning) in a single tragic episode; no male child survives
+      anywhere in the family; those reaching youth become deaf or
+      afflicted by urinary disease/paralysis; maternal uncle's family
+      destroyed even if the native's own is spared; savings lost many
+      times over in travel; no reliable advisor.
+    remedy: >
+      Feed 100 dogs delicious food on the joint and equal expense of the
+      whole family. Seek the blessing of a widow in the house to the
+      left while entering the ancestral home.
+    source: "Goswami 1952, Chapter 6, pp. 136-145"
+
+# Общее правило по складчине (относится ко всем видам Rin выше):
+general_remedy_note: >
+  Remedy for any elders' debt requires contribution from the entire
+  paternal blood line: son, daughter, granddaughter, daughters-in-law
+  (if married into the same family), sister, sister's son, grandson,
+  grandfather, paternal uncle and his descendants (in-laws are NOT
+  required to contribute). If a relative refuses or cannot contribute,
+  the person performing the remedy should cover ten times that relative's
+  share themselves, while warning them that the debt's effects may
+  otherwise continue through their own line.
+  Do not perform two elemental remedies (e.g. for two different debts)
+  simultaneously — run one for 40/43 days, pause, then run the next for
+  40/43 days.

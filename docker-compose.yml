@@ -1,0 +1,37 @@
+services:
+  bot:
+    build: .
+    container_name: whatsapp-astrologer-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      # Bindet an die öffentliche IP des VPS auf Port 5000 (siehe Hinweis
+      # in README.md zur Anbindung an Evolution API — bevorzugt über ein
+      # gemeinsames Docker-Netzwerk statt über diesen Port).
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+      - ./ephe:/app/ephe
+    networks:
+      - astrolog-net
+
+  admin:
+    build: .
+    container_name: whatsapp-astrologer-bot-admin
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "1", "admin_app:app"]
+    ports:
+      # NUR an localhost gebunden — von außerhalb des VPS nicht erreichbar.
+      # Zugriff via SSH-Tunnel: ssh -L 5001:localhost:5001 user@vps
+      - "127.0.0.1:5001:5001"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - astrolog-net
+
+networks:
+  astrolog-net:
+    driver: bridge
