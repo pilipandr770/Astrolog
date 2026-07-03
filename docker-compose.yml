@@ -6,10 +6,9 @@ services:
     env_file:
       - .env
     ports:
-      # Bindet an die öffentliche IP des VPS auf Port 5000 (siehe Hinweis
-      # in README.md zur Anbindung an Evolution API — bevorzugt über ein
-      # gemeinsames Docker-Netzwerk statt über diesen Port).
-      - "5000:5000"
+      # Host-Port 5010, da 5000 auf diesem VPS bereits von einem anderen
+      # Projekt (autoposter) belegt ist. Container-intern bleibt 5000.
+      - "5010:5000"
     volumes:
       - ./data:/app/data
       - ./ephe:/app/ephe
