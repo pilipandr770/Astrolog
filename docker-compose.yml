@@ -21,7 +21,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    command: ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "1", "admin_app:app"]
+    # --worker-class gthread --threads 4: derselbe Grund wie beim bot-Service
+    # (Dockerfile) — ein einzelner sync-Worker blockiert komplett auf jeder
+    # offenen Verbindung, die keine HTTP-Anfrage schickt (z.B. Browser-
+    # Vorab-Verbindungen über den SSH-Tunnel), bis zum Timeout.
+    command: ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "1", "--worker-class", "gthread", "--threads", "4", "admin_app:app"]
     ports:
       # NUR an localhost gebunden — von außerhalb des VPS nicht erreichbar.
       # Zugriff via SSH-Tunnel: ssh -L 5001:localhost:5001 user@vps
