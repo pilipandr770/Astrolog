@@ -5,6 +5,10 @@ PyYAML==6.0.2
 geopy==2.4.1
 timezonefinder==6.5.4
 WeasyPrint==62.3
+# pydyf >=0.11 bricht die Stream-API, die WeasyPrint 62.x erwartet
+# (AttributeError: 'super' object has no attribute 'transform' beim
+# write_pdf) — daher explizit auf die letzte kompatible Version gepinnt.
+pydyf==0.10.0
 Jinja2==3.1.4
 anthropic==0.69.0
 openai==1.109.1
