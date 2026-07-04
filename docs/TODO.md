@@ -47,15 +47,17 @@
       тизер с 1-2 яркими находками (`dialog_manager._send_teaser()`,
       `claude_service.generate_teaser()`) на языке пользователя, и только
       потом — ссылку на оплату.
-- [ ] В `payment_poller.check_pending_payments()`, после
-      `conversation_state.update(paid=1, ...)`, вызвать полный пайплайн:
-      natal_chart.compute() (уже есть, переиспользовать) → claude_service
-      (не забыть передать conversation_state целиком как birth_data — там
-      уже лежат language_hint/language_sample/style, generate_interpretation()
-      их подхватит сама) → pdf_generator → evolution_api.send_document.
-- [ ] Решить вопрос синхронности — если генерация PDF+Claude займёт
-      больше нескольких секунд, вынести в отдельную фоновую задачу (см.
-      `docs/ARCHITECTURE.md`, раздел "Известные ограничения").
+- [x] Полный пайплайн подключён — `app/services/report_generator.py`
+      (`generate_and_send_report()`): natal_chart.compute() →
+      claude_service.generate_interpretation() (получает conversation_state
+      целиком — language_hint/language_sample/style подхватываются) →
+      pdf_generator → evolution_api.send_document → state="report_sent".
+      Вызывается из payment_poller (сразу после оплаты) и из
+      dialog_manager (ветка state=="paid" — авто-ретрай при следующем
+      сообщении пользователя, если первая попытка упала).
+- [x] Синхронность: генерация идёт синхронно в потоке поллера (без
+      жёсткого таймаута это допустимо, см. ARCHITECTURE.md); защита от
+      параллельного двойного запуска — `report_generator._GENERATING`.
 - [ ] Добавить обработку неудачной оплаты / отменённой сессии (Stripe
       Checkout Session со статусом `expired` — сейчас `_remind_payment()` в
       `dialog_manager.py` создаёт новую сессию, если старая не `open`, но

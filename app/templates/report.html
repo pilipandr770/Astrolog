@@ -89,7 +89,7 @@
     {% for f in findings %}
     <div class="finding">
         <div class="finding-title">{{ f.title }}</div>
-        <div>{{ f.description }}</div>
+        <div>{{ f.summary }}</div>
         {% if f.remedy %}<div class="remedy">Empfehlung: {{ f.remedy }}</div>{% endif %}
     </div>
     {% else %}

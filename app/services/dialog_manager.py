@@ -30,6 +30,7 @@ from app.services import (
     geocoding,
     message_parser,
     natal_chart,
+    report_generator,
     stripe_service,
     whisper_service,
 )
@@ -84,11 +85,16 @@ def handle_message(phone: str, message: dict) -> None:
     elif current == "awaiting_payment":
         _remind_payment(phone, state)
     elif current == "paid":
+        # Zustand "paid" bedeutet: bezahlt, aber der Bericht wurde noch nicht
+        # (erfolgreich) zugestellt — z.B. weil die erste Generierung im
+        # Poller fehlgeschlagen ist. Jede Nachricht triggert einen neuen
+        # Versuch (report_generator schützt selbst vor Doppel-Läufen).
         evolution_api.send_text(
             phone,
-            "Danke für deine Zahlung! Dein Bericht wird gerade vorbereitet "
-            "und in Kürze hier ankommen.",
+            "Danke für deine Zahlung! Dein Bericht wird gerade erstellt — "
+            "das dauert nur ein paar Minuten.",
         )
+        report_generator.generate_and_send_report(phone)
     elif current == "report_sent":
         evolution_api.send_text(
             phone,

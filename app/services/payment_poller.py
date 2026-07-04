@@ -20,7 +20,7 @@ import time
 
 from app.config import Config
 from app.models import conversation_state
-from app.services import evolution_api, stripe_service
+from app.services import evolution_api, report_generator, stripe_service
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +41,14 @@ def check_pending_payments() -> None:
         conversation_state.update(phone, paid=1, state="paid")
         evolution_api.send_text(
             phone,
-            "Danke für deine Zahlung! Dein Bericht wird jetzt vorbereitet "
-            "und kommt in Kürze hier an.",
+            "Danke für deine Zahlung! Dein Bericht wird jetzt erstellt "
+            "und kommt in wenigen Minuten hier an.",
         )
-        # TODO (docs/TODO.md Punkt 4): hier den vollen Pipeline-Trigger
-        # einbauen (ephemeris -> lal_kitab -> claude_service ->
-        # pdf_generator -> evolution_api.send_document).
+        # Synchron im Poller-Thread (siehe docs/ARCHITECTURE.md, "Известные
+        # ограничения"): kein hartes Timeout wie bei einem Webhook, und bei
+        # Fehlern triggert die nächste Nutzernachricht einen Retry (siehe
+        # dialog_manager, Zweig state=="paid").
+        report_generator.generate_and_send_report(phone)
 
 
 def run_forever(interval_seconds: int = None) -> None:

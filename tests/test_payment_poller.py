@@ -11,7 +11,7 @@ def _fake_convo(phone="491234567", session_id="cs_test_123"):
     return {"phone": phone, "state": "awaiting_payment", "stripe_session_id": session_id}
 
 
-def test_check_pending_payments_marks_paid_and_notifies():
+def test_check_pending_payments_marks_paid_notifies_and_generates_report():
     with patch(
         "app.services.payment_poller.conversation_state.find_awaiting_payment",
         return_value=[_fake_convo()],
@@ -22,12 +22,15 @@ def test_check_pending_payments_marks_paid_and_notifies():
         "app.services.payment_poller.conversation_state.update"
     ) as mock_update, patch(
         "app.services.payment_poller.evolution_api.send_text"
-    ) as mock_send:
+    ) as mock_send, patch(
+        "app.services.payment_poller.report_generator.generate_and_send_report"
+    ) as mock_report:
         payment_poller.check_pending_payments()
 
     mock_update.assert_called_once_with("491234567", paid=1, state="paid")
     mock_send.assert_called_once()
     assert "491234567" == mock_send.call_args[0][0]
+    mock_report.assert_called_once_with("491234567")
 
 
 def test_check_pending_payments_skips_unpaid():
@@ -78,8 +81,11 @@ def test_check_pending_payments_processes_multiple_conversations():
         "app.services.payment_poller.conversation_state.update"
     ) as mock_update, patch(
         "app.services.payment_poller.evolution_api.send_text"
-    ) as mock_send:
+    ) as mock_send, patch(
+        "app.services.payment_poller.report_generator.generate_and_send_report"
+    ) as mock_report:
         payment_poller.check_pending_payments()
 
     mock_update.assert_called_once_with("491111111", paid=1, state="paid")
     mock_send.assert_called_once()
+    mock_report.assert_called_once_with("491111111")
