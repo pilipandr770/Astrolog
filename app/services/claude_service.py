@@ -165,12 +165,64 @@ def _format_house_activation(activation: dict) -> str:
     return "\n".join(lines)
 
 
+_PLANET_ABBR_LEGEND = (
+    "Su=Sun, Mo=Moon, Ma=Mars, Me=Mercury, Ju=Jupiter, Ve=Venus, "
+    "Sa=Saturn, Ra=Rahu, Ke=Ketu"
+)
+
+
+def _format_highlight_block(block: dict) -> str:
+    content = block["content"]
+    source = "Transit-Treffer" if content["source"] == "transit" else "nataler Grundton"
+    summary = content["rule"].get("summary", "")
+    return (
+        f"- {block['date'].strftime('%d.%m.%Y')}, "
+        f"{block['start_hour']:02d}:00–{block['end_hour']:02d}:00 Uhr: "
+        f"{content['planet']} ({source}) — {summary}"
+    )
+
+
+def _calendar_section(calendar_highlights: dict | None) -> str:
+    """
+    Anhang für die User-Message, wenn der Bericht den 30-Tage-Kalender
+    enthält (siehe report_generator + transit_forecast.pick_highlights):
+    Claude bekommt NUR die vorausgewählten Highlights und schreibt dazu
+    Lese-Anleitung + Zusammenfassung in der Zielsprache — die visuelle
+    Tabelle selbst rendert das PDF-Template, nicht Claude.
+    """
+    if not calendar_highlights:
+        return ""
+
+    best = "\n".join(_format_highlight_block(b) for b in calendar_highlights.get("best", [])) or "- keine"
+    worst = "\n".join(_format_highlight_block(b) for b in calendar_highlights.get("worst", [])) or "- keine"
+
+    return f"""
+
+Kalender-Highlights für die nächsten 30 Tage (lokale Zeit, stärkste Zeitfenster):
+Günstige Fenster:
+{best}
+Anspruchsvolle Fenster:
+{worst}
+
+Direkt nach deinem Text folgt im PDF eine visuelle Kalendertabelle: 30 Tage × \
+2-Stunden-Blöcke, Zellen mit Planeten-Kürzeln ({_PLANET_ABBR_LEGEND}). Farben: \
+grün=günstig, rot=Vorsicht, gelb=gemischt, grau=neutraler Grundton; fett mit \
+goldener Umrandung=aktiver Transit-Treffer. Schreibe deshalb als LETZTEN \
+Abschnitt deiner Auswertung (mit eigener Überschrift in der Zielsprache):
+1. eine kurze Anleitung (2-3 Sätze), wie man die Kalendertabelle liest — \
+erkläre die Farben und die Planeten-Kürzel in der Zielsprache,
+2. eine konkrete Zusammenfassung der oben gelisteten günstigen und \
+anspruchsvollen Zeitfenster mit Datum und Uhrzeit — nutze NUR diese \
+Highlights, erfinde keine zusätzlichen Zeitfenster."""
+
+
 def generate_interpretation(
     birth_data: dict,
     houses: dict,
     findings: list,
     rin_candidates: list | None = None,
     house_activation: dict | None = None,
+    calendar_highlights: dict | None = None,
 ) -> str:
     findings_text = "\n\n".join(_format_finding(f) for f in findings) or (
         "Keine spezifischen Lal-Kitab-Befunde für diese Karte gefunden."
@@ -208,11 +260,17 @@ Rin-Kandidaten (niedrige Konfidenz, siehe Systemanweisung):
 {rin_text}
 
 Erstelle daraus eine persönliche, gut lesbare Auswertung von ca. 400-600 Wörtern, \
-gegliedert in kurze Abschnitte mit Überschriften."""
+gegliedert in kurze Abschnitte mit Überschriften. Formatiere die gesamte \
+Auswertung als Markdown. Der Text erscheint 1:1 in einem bezahlten PDF-Bericht — \
+schreibe ALLES (auch Überschriften und Tabellen) konsequent in der Zielsprache, \
+ohne englische oder deutsche Einsprengsel. Beginne nach der Hauptüberschrift mit \
+einer kompakten Markdown-Tabelle der Planetenpositionen (Spalten: Planet, \
+Zeichen, Haus) — übersetze dabei auch die Planeten- und Sternzeichennamen in die \
+Zielsprache.{_calendar_section(calendar_highlights)}"""
 
     response = client.messages.create(
         model=Config.ANTHROPIC_MODEL,
-        max_tokens=2000,
+        max_tokens=3000,
         system=_with_extra_instructions(SYSTEM_PROMPT),
         messages=[{"role": "user", "content": user_message}],
     )

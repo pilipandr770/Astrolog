@@ -22,7 +22,13 @@ from datetime import date
 
 from app.config import Config
 from app.models import conversation_state
-from app.services import claude_service, evolution_api, natal_chart, pdf_generator
+from app.services import (
+    claude_service,
+    evolution_api,
+    natal_chart,
+    pdf_generator,
+    transit_forecast,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +36,20 @@ _GENERATING: set[str] = set()
 _GENERATING_LOCK = threading.Lock()
 
 REPORTS_DIR = os.path.join(os.path.dirname(Config.DATABASE_PATH), "reports")
+
+CALENDAR_DAYS = 30
+
+
+def _short_place(display_name: str) -> str:
+    """
+    Nominatim-display_name ist sehr lang ("Чернігів, Чернігівська міська
+    громада, ..., 14000-14499, Україна") — für die Meta-Zeile im PDF nur
+    Ort + Land behalten.
+    """
+    parts = [p.strip() for p in (display_name or "").split(",")]
+    if len(parts) <= 2:
+        return display_name or ""
+    return f"{parts[0]}, {parts[-1]}"
 
 
 def generate_and_send_report(phone: str) -> bool:
@@ -60,18 +80,39 @@ def _generate_and_send(phone: str) -> bool:
     try:
         chart = natal_chart.compute(state)
 
+        # 30-Tage-Kalender: Standort-Näherung = Geburtsort (siehe
+        # transit_forecast.build_monthly_calendar-Docstring). Fehler hier
+        # sind nicht fatal — der Bericht geht dann ohne Kalender raus.
+        calendar = None
+        highlights = None
+        try:
+            calendar = transit_forecast.build_monthly_calendar(
+                chart,
+                state["birth_lat"],
+                state["birth_lon"],
+                state["birth_tz"],
+                start_date=date.today(),
+                days=CALENDAR_DAYS,
+            )
+            highlights = transit_forecast.pick_highlights(calendar)
+        except Exception:
+            logger.exception(
+                "Monatskalender-Berechnung fehlgeschlagen für %s — Bericht ohne Kalender", phone
+            )
+
         interpretation = claude_service.generate_interpretation(
             state,
             chart["houses"],
             chart["findings"],
             rin_candidates=chart["rin_candidates"],
             house_activation=chart["house_activation"],
+            calendar_highlights=highlights,
         )
 
         birth_date_display = date.fromisoformat(state["birth_date"]).strftime("%d.%m.%Y")
         birth_time_display = state["birth_time"]
         if chart["is_time_approximate"]:
-            birth_time_display += " (angenommen: 12:00)"
+            birth_time_display += " (~12:00)"
 
         os.makedirs(REPORTS_DIR, exist_ok=True)
         pdf_path = os.path.join(REPORTS_DIR, f"report_{phone}.pdf")
@@ -80,11 +121,12 @@ def _generate_and_send(phone: str) -> bool:
             {
                 "date": birth_date_display,
                 "time": birth_time_display,
-                "place": state["birth_place"],
+                "place": _short_place(state["birth_place"]),
             },
             chart["houses"],
             chart["findings"],
             interpretation,
+            calendar=calendar,
         )
 
         evolution_api.send_document(

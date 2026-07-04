@@ -63,3 +63,67 @@ def test_generate_interpretation_includes_style_and_language(monkeypatch):
     user_message = captured["messages"][0]["content"]
     assert "business" in user_message.lower() or "sachlich" in user_message.lower()
     assert "Bonjour" in user_message
+
+
+def test_generate_interpretation_includes_calendar_highlights():
+    from datetime import date
+
+    fake_block = type("Block", (), {"type": "text", "text": "Auswertung"})()
+    fake_response = type("Response", (), {"content": [fake_block]})()
+    captured = {}
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return fake_response
+
+    highlights = {
+        "best": [{
+            "date": date(2026, 7, 10),
+            "start_hour": 14,
+            "end_hour": 16,
+            "score": 4,
+            "content": {
+                "source": "transit",
+                "planet": "Jupiter",
+                "rule": {"summary": "Great fortune flows", "severity": "positive"},
+            },
+        }],
+        "worst": [],
+    }
+
+    with patch.object(claude_service.settings, "get_setting", return_value=""), \
+         patch.object(claude_service.client.messages, "create", side_effect=fake_create):
+        claude_service.generate_interpretation(
+            {"style": "warm"},
+            {"Moon": {"sign": "Cancer", "house": 6}},
+            [],
+            calendar_highlights=highlights,
+        )
+
+    user_message = captured["messages"][0]["content"]
+    assert "10.07.2026" in user_message
+    assert "14:00–16:00" in user_message
+    assert "Jupiter" in user_message
+    assert "Great fortune flows" in user_message
+    # Anleitung für die visuelle Tabelle wird nur MIT Kalender angefordert
+    assert "Kalendertabelle" in user_message
+
+
+def test_generate_interpretation_without_calendar_has_no_calendar_section():
+    fake_block = type("Block", (), {"type": "text", "text": "Auswertung"})()
+    fake_response = type("Response", (), {"content": [fake_block]})()
+    captured = {}
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return fake_response
+
+    with patch.object(claude_service.settings, "get_setting", return_value=""), \
+         patch.object(claude_service.client.messages, "create", side_effect=fake_create):
+        claude_service.generate_interpretation(
+            {"style": "warm"},
+            {"Moon": {"sign": "Cancer", "house": 6}},
+            [],
+        )
+
+    assert "Kalendertabelle" not in captured["messages"][0]["content"]

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html>
 <head>
 <meta charset="UTF-8">
 <style>
@@ -7,7 +7,7 @@
         size: A4;
         margin: 2.5cm 2cm;
         @bottom-center {
-            content: "Lal Kitab Auswertung — Seite " counter(page) " von " counter(pages);
+            content: "Lal Kitab — " counter(page) " / " counter(pages);
             font-size: 9px;
             color: #999;
         }
@@ -16,9 +16,11 @@
         font-family: 'Georgia', serif;
         color: #2b2320;
         line-height: 1.6;
+        font-size: 13px;
     }
+    /* Заголовки приходят из Markdown-текста Claude (на языке клиента) */
     h1 {
-        font-size: 26px;
+        font-size: 24px;
         color: #6b3f1d;
         border-bottom: 2px solid #c9963f;
         padding-bottom: 10px;
@@ -28,10 +30,12 @@
         color: #6b3f1d;
         margin-top: 28px;
     }
+    h3 { font-size: 14px; color: #6b3f1d; margin-top: 20px; }
+    hr { border: none; border-top: 1px solid #e5ddd0; margin: 18px 0; }
     .meta {
         font-size: 12px;
         color: #666;
-        margin-bottom: 24px;
+        margin-bottom: 20px;
     }
     table {
         width: 100%;
@@ -48,18 +52,40 @@
         background: #f7f1e6;
         color: #6b3f1d;
     }
-    .finding {
-        margin-bottom: 14px;
-        padding: 10px 14px;
+    blockquote {
+        margin: 10px 0;
+        padding: 8px 14px;
         border-left: 3px solid #c9963f;
         background: #faf6ee;
     }
-    .finding-title { font-weight: bold; color: #6b3f1d; }
-    .remedy { font-style: italic; font-size: 12px; color: #555; margin-top: 4px; }
-    .interpretation { white-space: pre-line; font-size: 13px; }
+
+    /* --- Календарная сетка на 30 дней (2-часовые блоки) --- */
+    .calendar-section { page-break-before: always; }
+    table.calendar {
+        table-layout: fixed;
+        font-size: 7px;
+        margin-top: 8px;
+    }
+    table.calendar th, table.calendar td {
+        text-align: center;
+        padding: 3px 1px;
+        border: 0.5pt solid #e5ddd0;
+    }
+    table.calendar th.day {
+        text-align: right;
+        padding-right: 4px;
+        width: 34px;
+        background: #f7f1e6;
+    }
+    td.positive { background: #ddefd5; color: #2d5a27; }
+    td.caution  { background: #f6d9d5; color: #7a1f1a; }
+    td.mixed    { background: #f8eecb; color: #7a5c1a; }
+    td.neutral  { background: #f2efe9; color: #8a8378; }
+    td.transit  { font-weight: bold; border: 1pt solid #c9963f; }
+
     .disclaimer {
         margin-top: 40px;
-        font-size: 10px;
+        font-size: 9px;
         color: #999;
         border-top: 1px solid #e5ddd0;
         padding-top: 10px;
@@ -67,41 +93,44 @@
 </style>
 </head>
 <body>
-    <h1>Deine Lal-Kitab-Auswertung</h1>
     <div class="meta">
-        Geburtsdatum: {{ birth_data.get('date') }} · Geburtszeit: {{ birth_data.get('time') }}
-        · Geburtsort: {{ birth_data.get('place') }}
+        {{ birth_data.get('date') }} · {{ birth_data.get('time') }} · {{ birth_data.get('place') }}
     </div>
 
-    <h2>Planetenpositionen</h2>
-    <table>
-        <tr><th>Planet</th><th>Zeichen</th><th>Haus</th></tr>
-        {% for name, data in houses.items() %}
-        <tr>
-            <td>{{ name }}</td>
-            <td>{{ data.sign }}</td>
-            <td>{{ data.house }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <div class="interpretation">{{ interpretation_html }}</div>
 
-    <h2>Lal-Kitab-Befunde</h2>
-    {% for f in findings %}
-    <div class="finding">
-        <div class="finding-title">{{ f.title }}</div>
-        <div>{{ f.summary }}</div>
-        {% if f.remedy %}<div class="remedy">Empfehlung: {{ f.remedy }}</div>{% endif %}
+    {% if calendar %}
+    <div class="calendar-section">
+        <table class="calendar">
+            <tr>
+                <th class="day"></th>
+                {% for block in calendar[0].blocks %}
+                <th>{{ '%02d'|format(block.start_hour) }}–{{ '%02d'|format(block.end_hour) }}</th>
+                {% endfor %}
+            </tr>
+            {% for day in calendar %}
+            <tr>
+                <th class="day">{{ day.date.strftime('%d.%m') }}</th>
+                {% for block in day.blocks %}
+                {% set content = block.content %}
+                {% if content %}
+                <td class="{{ content.rule.severity or 'neutral' }}{{ ' transit' if content.source == 'transit' }}">
+                    {{ planet_abbr.get(content.planet, content.planet[:2]) }}
+                </td>
+                {% else %}
+                <td class="neutral"></td>
+                {% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </table>
     </div>
-    {% else %}
-    <p>Keine spezifischen Befunde für diese Karte.</p>
-    {% endfor %}
-
-    <h2>Deine persönliche Auswertung</h2>
-    <div class="interpretation">{{ interpretation_text }}</div>
+    {% endif %}
 
     <div class="disclaimer">
         Diese Auswertung dient der Unterhaltung und Selbstreflexion und ersetzt
-        keine medizinische, rechtliche oder finanzielle Beratung.
+        keine medizinische, rechtliche oder finanzielle Beratung. /
+        This report is for entertainment and self-reflection purposes only.
     </div>
 </body>
 </html>

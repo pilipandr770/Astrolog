@@ -34,10 +34,15 @@ def _fake_chart():
 
 
 def test_generate_and_send_report_happy_path(tmp_path):
+    fake_calendar = [{"date": None, "slow_transits": {}, "blocks": []}]
+    fake_highlights = {"best": [], "worst": []}
+
     with patch.object(report_generator, "REPORTS_DIR", str(tmp_path)), \
          patch.object(report_generator.conversation_state, "get_or_create", return_value=_paid_state()), \
          patch.object(report_generator.conversation_state, "update") as mock_update, \
          patch.object(report_generator.natal_chart, "compute", return_value=_fake_chart()), \
+         patch.object(report_generator.transit_forecast, "build_monthly_calendar", return_value=fake_calendar), \
+         patch.object(report_generator.transit_forecast, "pick_highlights", return_value=fake_highlights), \
          patch.object(report_generator.claude_service, "generate_interpretation", return_value="Text") as mock_claude, \
          patch.object(report_generator.pdf_generator, "generate_report_pdf") as mock_pdf, \
          patch.object(report_generator.evolution_api, "send_document") as mock_doc:
@@ -46,6 +51,7 @@ def test_generate_and_send_report_happy_path(tmp_path):
     # Das volle conversation_state-Dict geht an Claude — language_hint/
     # language_sample/style stecken darin (siehe _language_directive).
     assert mock_claude.call_args[0][0] == _paid_state()
+    assert mock_claude.call_args.kwargs["calendar_highlights"] == fake_highlights
     mock_pdf.assert_called_once()
     birth_display = mock_pdf.call_args[0][1]
     assert birth_display == {
@@ -53,8 +59,38 @@ def test_generate_and_send_report_happy_path(tmp_path):
         "time": "14:30",
         "place": "Berlin, Deutschland",
     }
+    assert mock_pdf.call_args.kwargs["calendar"] == fake_calendar
     mock_doc.assert_called_once()
     mock_update.assert_called_once_with("491234567", state="report_sent")
+
+
+def test_generate_and_send_report_survives_calendar_failure(tmp_path):
+    # Kalender-Fehler darf den Bericht NICHT verhindern — er geht ohne
+    # Kalender raus (calendar=None, calendar_highlights=None).
+    with patch.object(report_generator, "REPORTS_DIR", str(tmp_path)), \
+         patch.object(report_generator.conversation_state, "get_or_create", return_value=_paid_state()), \
+         patch.object(report_generator.conversation_state, "update") as mock_update, \
+         patch.object(report_generator.natal_chart, "compute", return_value=_fake_chart()), \
+         patch.object(report_generator.transit_forecast, "build_monthly_calendar", side_effect=RuntimeError("swe")), \
+         patch.object(report_generator.claude_service, "generate_interpretation", return_value="Text") as mock_claude, \
+         patch.object(report_generator.pdf_generator, "generate_report_pdf") as mock_pdf, \
+         patch.object(report_generator.evolution_api, "send_document"):
+        assert report_generator.generate_and_send_report("491234567") is True
+
+    assert mock_claude.call_args.kwargs["calendar_highlights"] is None
+    assert mock_pdf.call_args.kwargs["calendar"] is None
+    mock_update.assert_called_once_with("491234567", state="report_sent")
+
+
+def test_short_place_keeps_city_and_country():
+    long_name = (
+        "Чернігів, Чернігівська міська громада, Чернігівський район, "
+        "Чернігівська область, 14000-14499, Україна"
+    )
+    assert report_generator._short_place(long_name) == "Чернігів, Україна"
+    assert report_generator._short_place("Berlin, Deutschland") == "Berlin, Deutschland"
+    assert report_generator._short_place("Berlin") == "Berlin"
+    assert report_generator._short_place("") == ""
 
 
 def test_generate_and_send_report_marks_approximate_time(tmp_path):
@@ -67,12 +103,14 @@ def test_generate_and_send_report_marks_approximate_time(tmp_path):
          patch.object(report_generator.conversation_state, "get_or_create", return_value=state), \
          patch.object(report_generator.conversation_state, "update"), \
          patch.object(report_generator.natal_chart, "compute", return_value=chart), \
+         patch.object(report_generator.transit_forecast, "build_monthly_calendar", return_value=[]), \
+         patch.object(report_generator.transit_forecast, "pick_highlights", return_value={"best": [], "worst": []}), \
          patch.object(report_generator.claude_service, "generate_interpretation", return_value="Text"), \
          patch.object(report_generator.pdf_generator, "generate_report_pdf") as mock_pdf, \
          patch.object(report_generator.evolution_api, "send_document"):
         report_generator.generate_and_send_report("491234567")
 
-    assert "angenommen" in mock_pdf.call_args[0][1]["time"]
+    assert "~12:00" in mock_pdf.call_args[0][1]["time"]
 
 
 def test_generate_and_send_report_failure_keeps_paid_state_and_apologizes():
