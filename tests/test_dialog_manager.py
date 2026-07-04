@@ -124,6 +124,36 @@ def test_handle_style_accepts_valid_digit_and_proceeds():
     mock_payment.assert_called_once()
 
 
+def test_extract_text_audio_uses_evolution_base64_not_encrypted_url():
+    # Die Webhook-URL (mmg.whatsapp.net/...enc) ist E2E-verschlüsselt —
+    # das Audio MUSS über get_media_base64 von Evolution geholt werden.
+    message = {
+        "type": "audio",
+        "media_url": "https://mmg.whatsapp.net/xyz.enc",
+        "message_key": {"id": "MSG123", "remoteJid": "491234567@s.whatsapp.net"},
+    }
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager, "whisper_service") as mock_whisper, \
+         patch.object(dialog_manager.conversation_state, "update") as mock_update:
+        mock_evo.get_media_base64.return_value = {
+            "base64": "AAAA",
+            "mimetype": "audio/ogg; codecs=opus",
+        }
+        mock_whisper.transcribe_from_base64.return_value = {
+            "text": "15.05.1990",
+            "language": "german",
+        }
+        text = dialog_manager._extract_text("491234567", message)
+
+    assert text == "15.05.1990"
+    mock_evo.get_media_base64.assert_called_once_with(message["message_key"])
+    mock_whisper.transcribe_from_base64.assert_called_once_with(
+        "AAAA", "audio/ogg; codecs=opus"
+    )
+    mock_whisper.transcribe_from_url.assert_not_called()
+    mock_update.assert_called_once_with("491234567", language_hint="german")
+
+
 def test_style_menu_text_extracts_digit_anywhere_in_message():
     # "_handle_style" sucht die erste Ziffer 1-4 irgendwo im Text (z.B. "3." oder "Nummer 3")
     with patch.object(dialog_manager, "conversation_state") as mock_state, \

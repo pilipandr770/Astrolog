@@ -106,7 +106,13 @@ def _extract_text(phone: str, message: dict) -> str | None:
 
     if message["type"] == "audio":
         try:
-            result = whisper_service.transcribe_from_url(message["media_url"])
+            # Die Webhook-URL ist E2E-verschlüsselt und direkt unbrauchbar —
+            # das entschlüsselte Audio liefert nur Evolution selbst
+            # (siehe evolution_api.get_media_base64).
+            media = evolution_api.get_media_base64(message["message_key"])
+            result = whisper_service.transcribe_from_base64(
+                media["base64"], media.get("mimetype")
+            )
         except Exception:
             logger.exception("Whisper-Transkription fehlgeschlagen für %s", phone)
             evolution_api.send_text(
@@ -142,10 +148,27 @@ def _start_dialog(phone: str) -> None:
     conversation_state.update(phone, state="awaiting_date")
     evolution_api.send_text(
         phone,
-        "Hallo! 🌙 Ich bin dein Lal-Kitab-Astrologie-Assistent.\n\n"
-        "Um deine persönliche Auswertung zu erstellen, brauche ich drei Angaben: "
-        "Geburtsdatum, Geburtszeit und Geburtsort.\n\n"
-        "Bitte sende mir zuerst dein Geburtsdatum, z. B. 15.05.1990.",
+        "Hallo! 🌙 Ich bin dein persönlicher Lal-Kitab-Astrologe.\n\n"
+        "So funktioniert es:\n"
+        "1️⃣ Du nennst mir dein Geburtsdatum, deine Geburtszeit und deinen "
+        "Geburtsort.\n"
+        "2️⃣ Ich berechne damit die genaue Position der Planeten im Moment "
+        "deiner Geburt — mit einem professionellen astronomischen "
+        "Berechnungsprogramm.\n"
+        "3️⃣ Dann schaue ich im alten indischen Buch Lal Kitab nach, was diese "
+        "Konstellation bedeutet — und erzähle dir kostenlos in ein paar Sätzen, "
+        "was ich in deiner Karte gesehen habe.\n"
+        "4️⃣ Wenn du mehr erfahren möchtest, bekommst du einen Link für eine "
+        f"einfache und sichere Zahlung ({Config.REPORT_PRICE_EUR} €) — und ich "
+        "erstelle deinen ausführlichen Horoskop-Bericht, persönlich für dich, "
+        "als schönes PDF.\n\n"
+        "Dein Bericht enthält:\n"
+        "🌟 deine vollständige Geburtskarte — alle 9 Planeten und 12 Häuser\n"
+        "📖 was jede Position laut Lal Kitab für dein Leben bedeutet\n"
+        "💡 konkrete Hinweise und Empfehlungen aus der Tradition\n\n"
+        "Sollen wir es versuchen? Dann schick mir einfach dein Geburtsdatum, "
+        "z. B. 15.05.1990. 🎙 Du kannst mir übrigens auch eine Sprachnachricht "
+        "schicken.",
     )
 
 

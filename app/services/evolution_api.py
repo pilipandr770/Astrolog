@@ -43,6 +43,24 @@ def send_document(phone: str, file_path: str, filename: str, caption: str = "") 
     return response.json()
 
 
+def get_media_base64(message_key: dict) -> dict:
+    """
+    Holt das ENTSCHLÜSSELTE Medium einer Nachricht als Base64 über
+    Evolution API (/chat/getBase64FromMediaMessage). Wichtig: die URL im
+    Webhook zeigt auf mmg.whatsapp.net/...enc — das ist die Ende-zu-Ende-
+    verschlüsselte Datei, ein direkter Download liefert unbrauchbare Bytes
+    (OpenAI antwortet dann mit 'Invalid file format'). Nur Evolution selbst
+    besitzt die Schlüssel zum Entschlüsseln.
+
+    Rückgabe (Evolution v2): {"mediaType": ..., "mimetype": ..., "base64": ...}
+    """
+    url = f"{BASE_URL}/chat/getBase64FromMediaMessage/{INSTANCE}"
+    payload = {"message": {"key": message_key}, "convertToMp4": False}
+    response = requests.post(url, json=payload, headers=HEADERS, timeout=60)
+    response.raise_for_status()
+    return response.json()
+
+
 def extract_incoming_message(webhook_payload: dict) -> dict | None:
     """
     Парсит вебхук от Evolution API в упрощённый формат.
@@ -62,7 +80,11 @@ def extract_incoming_message(webhook_payload: dict) -> dict | None:
             return {
                 "phone": phone,
                 "type": "audio",
+                # media_url ist die E2E-verschlüsselte WhatsApp-URL — nur als
+                # Debug-Info behalten. Zum Transkribieren message_key an
+                # get_media_base64() geben (siehe dialog_manager._extract_text).
                 "media_url": message["audioMessage"].get("url"),
+                "message_key": data.get("key", {}),
             }
 
         return None
