@@ -210,10 +210,15 @@ grün=günstig, rot=Vorsicht, gelb=gemischt, grau=neutraler Grundton; fett mit \
 goldener Umrandung=aktiver Transit-Treffer. Schreibe deshalb als LETZTEN \
 Abschnitt deiner Auswertung (mit eigener Überschrift in der Zielsprache):
 1. eine kurze Anleitung (2-3 Sätze), wie man die Kalendertabelle liest — \
-erkläre die Farben und die Planeten-Kürzel in der Zielsprache,
+erkläre die Farben in der Zielsprache und liste die Kürzel-Zuordnung auf. \
+WICHTIG: Die Kürzel in der Tabelle sind lateinisch und ändern sich nicht — \
+zitiere sie EXAKT so (Su, Mo, Ma, Me, Ju, Ve, Sa, Ra, Ke) und übersetze nur \
+die Planetennamen dahinter (z.B. "Su = Солнце" in einer russischen Auswertung).
 2. eine konkrete Zusammenfassung der oben gelisteten günstigen und \
 anspruchsvollen Zeitfenster mit Datum und Uhrzeit — nutze NUR diese \
-Highlights, erfinde keine zusätzlichen Zeitfenster."""
+Highlights, erfinde keine zusätzlichen Zeitfenster. Formatiere die \
+Zeitfenster als Markdown-Liste: jedes Fenster auf einer EIGENEN Zeile, \
+die mit "- " beginnt (eine Leerzeile zwischen einleitendem Satz und Liste)."""
 
 
 def generate_interpretation(
@@ -263,14 +268,16 @@ Erstelle daraus eine persönliche, gut lesbare Auswertung von ca. 400-600 Wörte
 gegliedert in kurze Abschnitte mit Überschriften. Formatiere die gesamte \
 Auswertung als Markdown. Der Text erscheint 1:1 in einem bezahlten PDF-Bericht — \
 schreibe ALLES (auch Überschriften und Tabellen) konsequent in der Zielsprache, \
-ohne englische oder deutsche Einsprengsel. Beginne nach der Hauptüberschrift mit \
+ohne englische oder deutsche Einsprengsel. Verwende KEINE Emojis und keine \
+astrologischen Sonderzeichen (☿, ♃ usw.) — die PDF-Schrift kann sie nicht \
+darstellen. Beginne nach der Hauptüberschrift mit \
 einer kompakten Markdown-Tabelle der Planetenpositionen (Spalten: Planet, \
 Zeichen, Haus) — übersetze dabei auch die Planeten- und Sternzeichennamen in die \
 Zielsprache.{_calendar_section(calendar_highlights)}"""
 
     response = client.messages.create(
         model=Config.ANTHROPIC_MODEL,
-        max_tokens=3000,
+        max_tokens=5000,
         system=_with_extra_instructions(SYSTEM_PROMPT),
         messages=[{"role": "user", "content": user_message}],
     )
