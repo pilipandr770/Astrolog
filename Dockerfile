@@ -34,4 +34,10 @@ EXPOSE 5000
 # starten und doppelte WhatsApp-Nachrichten verschicken. Bei Bedarf für mehr
 # Worker: ENABLE_INPROCESS_PAYMENT_POLLER=false setzen und den Poller separat
 # starten (python -m app.services.payment_poller).
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "120", "run:app"]
+# --worker-class gthread --threads 4: der öffentlich exponierte Port bekommt
+# ständig Verbindungen von Internet-Scannern, die nie eine HTTP-Anfrage
+# senden — mit dem synchronen Standard-Worker blockiert so eine Verbindung
+# den EINZIGEN Worker bis zum Timeout (siehe WORKER TIMEOUT-Logs). Threads
+# lassen den einen Prozess (= ein Payment-Poller-Thread) mehrere Verbindungen
+# parallel bedienen, ohne dass eine hängende Verbindung echte Webhooks blockiert.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--worker-class", "gthread", "--threads", "4", "--timeout", "120", "run:app"]
