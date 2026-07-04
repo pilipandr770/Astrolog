@@ -8,6 +8,11 @@
     → conversation_state: определить текущий шаг диалога
     → [текст] использовать как есть
     → [голос] whisper_service.transcribe_from_url() → текст
+    → new/sales_chat: свободный разговор с Claude (dialog_manager.
+      _handle_sales_chat, claude_service.generate_sales_reply) — отвечает на
+      вопросы, честно объясняет расчёт vs. трактовку, сам решает через
+      tool-call start_intake, когда пользователь готов перейти к сбору данных
+      (история диалога — conversation_state.sales_chat_history, JSON)
     → парсинг ответа, обновление conversation_state
     → когда все 3 поля собраны (дата, время, место):
         geocoding.geocode_place() → lat/lon/tz
@@ -91,6 +96,10 @@ Cloudflare Tunnel), Stripe может push'ить checkout.session.completed
 - **Стиль отчёта — фиксированный список (`claude_service.STYLE_PRESETS`),
   не свободный текст** — через WhatsApp без кнопок проще всего попросить
   прислать номер 1-4, чем парсить произвольное описание стиля.
+- **Переход из свободного чата в сбор данных — через tool-call, не через
+  текстовый маркер** — `claude_service.START_INTAKE_TOOL` надёжнее, чем
+  просить Claude дописать в конце спец-строку и парсить/вырезать её из
+  ответа (риск утечки маркера пользователю или пропуска при перефразировании).
 
 ## Известные ограничения текущего скелета
 

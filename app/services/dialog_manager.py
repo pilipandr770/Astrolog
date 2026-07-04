@@ -1,6 +1,12 @@
 """
-Диалоговая state machine: new -> awaiting_date -> awaiting_time ->
+Диалоговая state machine: new/sales_chat -> awaiting_date -> awaiting_time ->
 awaiting_place -> awaiting_style -> awaiting_payment -> paid -> report_sent.
+
+new/sales_chat: freies Verkaufsgespräch (siehe _handle_sales_chat) — Claude
+beantwortet Fragen, erklärt ehrlich Berechnung vs. Interpretation, und
+entscheidet selbst (über das start_intake-Tool, siehe claude_service.py),
+wann der Nutzer bereit für die strukturierte Datenerfassung ist. Erst danach
+beginnt der feste State machine-Teil (Datum/Zeit/Ort/Stil) unverändert.
 
 Переход awaiting_payment -> paid отслеживается через опрос Stripe (см.
 app/services/payment_poller.py), а не через вебхук — сервер разворачивается
@@ -19,6 +25,7 @@ app/services/payment_poller.py), а не через вебхук — серве�
 - Стиль (шутливый/деловой/тёплый/романтичный) пользователь выбирает сам
   после указания места рождения (_handle_style()).
 """
+import json
 import logging
 from datetime import date
 
@@ -44,6 +51,11 @@ RESET_WORDS = {"neu", "neustart", "reset", "von vorne", "заново", "нач�
 # explizit gehalten, damit die Nummerierung nicht von Dict-Details abhängt.
 _STYLE_ORDER = ["warm", "humorous", "business", "romantic"]
 
+# Begrenzt das gespeicherte Verkaufsgespräch (siehe _handle_sales_chat) auf die
+# letzten N Turns (1 Turn = 1 User- + 1 Assistant-Nachricht) — verhindert
+# unbegrenztes Token-Wachstum bei sehr gesprächigen Interessenten.
+MAX_SALES_HISTORY_TURNS = 8
+
 
 def handle_message(phone: str, message: dict) -> None:
     text = _extract_text(phone, message)
@@ -65,6 +77,7 @@ def handle_message(phone: str, message: dict) -> None:
             style=None,
             paid=0,
             stripe_session_id=None,
+            sales_chat_history=None,
         )
         state = conversation_state.get_or_create(phone)
 
@@ -72,8 +85,8 @@ def handle_message(phone: str, message: dict) -> None:
 
     current = state["state"]
 
-    if current == "new":
-        _start_dialog(phone)
+    if current in ("new", "sales_chat"):
+        _handle_sales_chat(phone, text, state)
     elif current == "awaiting_date":
         _handle_date(phone, text)
     elif current == "awaiting_time":
@@ -103,7 +116,7 @@ def handle_message(phone: str, message: dict) -> None:
         )
     else:
         logger.warning("Unbekannter Zustand '%s' für %s", current, phone)
-        _start_dialog(phone)
+        _handle_sales_chat(phone, text, state)
 
 
 def _extract_text(phone: str, message: dict) -> str | None:
@@ -150,32 +163,52 @@ def _capture_language_signal(phone: str, state: dict, text: str) -> None:
         conversation_state.update(phone, language_sample=text.strip()[:200])
 
 
-def _start_dialog(phone: str) -> None:
-    conversation_state.update(phone, state="awaiting_date")
-    evolution_api.send_text(
-        phone,
-        "Hallo! 🌙 Ich bin dein persönlicher Lal-Kitab-Astrologe.\n\n"
-        "So funktioniert es:\n"
-        "1️⃣ Du nennst mir dein Geburtsdatum, deine Geburtszeit und deinen "
-        "Geburtsort.\n"
-        "2️⃣ Ich berechne damit die genaue Position der Planeten im Moment "
-        "deiner Geburt — mit einem professionellen astronomischen "
-        "Berechnungsprogramm.\n"
-        "3️⃣ Dann schaue ich im alten indischen Buch Lal Kitab nach, was diese "
-        "Konstellation bedeutet — und erzähle dir kostenlos in ein paar Sätzen, "
-        "was ich in deiner Karte gesehen habe.\n"
-        "4️⃣ Wenn du mehr erfahren möchtest, bekommst du einen Link für eine "
-        f"einfache und sichere Zahlung ({Config.REPORT_PRICE_EUR} €) — und ich "
-        "erstelle deinen ausführlichen Horoskop-Bericht, persönlich für dich, "
-        "als schönes PDF.\n\n"
-        "Dein Bericht enthält:\n"
-        "🌟 deine vollständige Geburtskarte — alle 9 Planeten und 12 Häuser\n"
-        "📖 was jede Position laut Lal Kitab für dein Leben bedeutet\n"
-        "💡 konkrete Hinweise und Empfehlungen aus der Tradition\n\n"
-        "Sollen wir es versuchen? Dann schick mir einfach dein Geburtsdatum, "
-        "z. B. 15.05.1990. 🎙 Du kannst mir übrigens auch eine Sprachnachricht "
-        "schicken.",
-    )
+def _handle_sales_chat(phone: str, text: str, state: dict) -> None:
+    """
+    Freies Verkaufsgespräch vor der Datenerfassung — ersetzt die frühere feste
+    Begrüßungsnachricht. Claude beantwortet Fragen ehrlich, erklärt den Service
+    und ruft selbst (via claude_service.START_INTAKE_TOOL) den Wechsel in die
+    strukturierte Erfassung aus, sobald der Nutzer bereit wirkt.
+    """
+    history = json.loads(state.get("sales_chat_history") or "[]")
+
+    try:
+        reply_text, ready = claude_service.generate_sales_reply(state, history, text)
+    except Exception:
+        logger.exception("Sales-Chat-Antwort fehlgeschlagen für %s", phone)
+        evolution_api.send_text(
+            phone,
+            "Entschuldige, gerade gab es ein technisches Problem. Kannst du "
+            "das bitte noch einmal schreiben?",
+        )
+        return
+
+    if not reply_text:
+        # Sollte durch den Prompt praktisch nie vorkommen, aber eine leere
+        # WhatsApp-Nachricht wäre verwirrend — lieber eine Rückfrage senden.
+        reply_text = "Magst du mir noch etwas mehr erzählen, was dich interessiert?"
+
+    history = history + [
+        {"role": "user", "content": text},
+        {"role": "assistant", "content": reply_text},
+    ]
+    history = history[-(MAX_SALES_HISTORY_TURNS * 2):]
+
+    if ready:
+        conversation_state.update(
+            phone, state="awaiting_date", sales_chat_history=None
+        )
+        evolution_api.send_text(phone, reply_text)
+        evolution_api.send_text(
+            phone,
+            "Bitte sende mir dein Geburtsdatum, z. B. 15.05.1990. 🎙 Du kannst "
+            "mir übrigens auch eine Sprachnachricht schicken.",
+        )
+    else:
+        conversation_state.update(
+            phone, state="sales_chat", sales_chat_history=json.dumps(history)
+        )
+        evolution_api.send_text(phone, reply_text)
 
 
 def _handle_date(phone: str, text: str) -> None:

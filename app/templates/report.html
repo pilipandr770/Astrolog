@@ -58,6 +58,12 @@
         border-left: 3px solid #c9963f;
         background: #faf6ee;
     }
+    /* Verhindert verwaiste Listenmarker: ein <li> darf nicht so über die
+       Seite brechen, dass nur der Punkt auf der einen und der Text auf
+       der nächsten Seite landet (beobachtet bei den Kalender-Highlight-
+       Listen aus Claudes Markdown). */
+    ul, ol { page-break-inside: avoid; }
+    li { page-break-inside: avoid; }
 
     /* --- Календарная сетка на 30 дней (2-часовые блоки) --- */
     .calendar-section { page-break-before: always; }

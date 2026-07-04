@@ -36,3 +36,54 @@ def test_generate_teaser_uses_extra_instructions_and_returns_text():
     assert result == "Teaser-Text"
     mock_create.assert_called_once()
     assert mock_create.call_args.kwargs["system"] == claude_service.TEASER_SYSTEM_PROMPT
+
+
+def _fake_sales_response(text=None, tool_called=False):
+    blocks = []
+    if text is not None:
+        blocks.append(type("TextBlock", (), {"type": "text", "text": text})())
+    if tool_called:
+        blocks.append(type("ToolBlock", (), {"type": "tool_use", "name": "start_intake"})())
+    return type("Response", (), {"content": blocks})()
+
+
+def test_generate_sales_reply_not_ready_without_tool_call():
+    fake_response = _fake_sales_response(text="Klar, frag gern weiter!")
+
+    with patch.object(claude_service.settings, "get_setting", return_value=""), \
+         patch.object(claude_service.client.messages, "create", return_value=fake_response) as mock_create:
+        text, ready = claude_service.generate_sales_reply({}, [], "Was kostet das?")
+
+    assert text == "Klar, frag gern weiter!"
+    assert ready is False
+    assert mock_create.call_args.kwargs["tools"] == [claude_service.START_INTAKE_TOOL]
+    sent_messages = mock_create.call_args.kwargs["messages"]
+    assert sent_messages[-1] == {"role": "user", "content": "Was kostet das?"}
+
+
+def test_generate_sales_reply_ready_when_tool_called():
+    fake_response = _fake_sales_response(text="Super, dann los!", tool_called=True)
+
+    with patch.object(claude_service.settings, "get_setting", return_value=""), \
+         patch.object(claude_service.client.messages, "create", return_value=fake_response):
+        text, ready = claude_service.generate_sales_reply({}, [], "Ja, lass uns starten")
+
+    assert text == "Super, dann los!"
+    assert ready is True
+
+
+def test_generate_sales_reply_includes_prior_history_in_messages():
+    fake_response = _fake_sales_response(text="Antwort")
+    history = [
+        {"role": "user", "content": "Hi"},
+        {"role": "assistant", "content": "Hallo! Wie kann ich helfen?"},
+    ]
+
+    with patch.object(claude_service.settings, "get_setting", return_value=""), \
+         patch.object(claude_service.client.messages, "create", return_value=fake_response) as mock_create:
+        claude_service.generate_sales_reply({}, history, "Was genau macht ihr?")
+
+    sent_messages = mock_create.call_args.kwargs["messages"]
+    assert sent_messages[0] == history[0]
+    assert sent_messages[1] == history[1]
+    assert sent_messages[2] == {"role": "user", "content": "Was genau macht ihr?"}

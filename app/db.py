@@ -22,6 +22,12 @@ CREATE TABLE IF NOT EXISTS conversations (
     language_sample TEXT,
     -- Gewünschter Ton der Auswertung, siehe claude_service.STYLE_PRESETS
     style TEXT,
+    -- JSON-Liste der bisherigen Verkaufsgespräch-Turns (siehe
+    -- dialog_manager._handle_sales_chat) — nötig, damit Claude über
+    -- mehrere Nachrichten hinweg Kontext behält, bevor die strukturierte
+    -- Datenerfassung beginnt. Wird beim Übergang zu awaiting_date/bei
+    -- Reset wieder geleert.
+    sales_chat_history TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -61,5 +67,6 @@ def init_db():
     _ensure_column(conn, "conversations", "language_hint", "TEXT")
     _ensure_column(conn, "conversations", "language_sample", "TEXT")
     _ensure_column(conn, "conversations", "style", "TEXT")
+    _ensure_column(conn, "conversations", "sales_chat_history", "TEXT")
     conn.commit()
     conn.close()

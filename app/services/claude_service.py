@@ -69,6 +69,78 @@ def _language_directive(birth_data: dict) -> str:
     return "Schreibe auf Deutsch (Standardsprache — kein Sprachsignal vom Nutzer vorhanden)."
 
 
+START_INTAKE_TOOL = {
+    "name": "start_intake",
+    "description": (
+        "Aufrufen, sobald der Interessent erkennen lässt, dass er bereit ist, "
+        "seine Geburtsdaten (Datum, Zeit, Ort) für die Berechnung zu nennen — "
+        "z.B. er stimmt zu, fragt aktiv nach dem nächsten Schritt, oder nennt "
+        "bereits ein Geburtsdatum. NICHT aufrufen, solange noch offene Fragen "
+        "im Raum stehen oder der Nutzer unentschlossen wirkt."
+    ),
+    "input_schema": {"type": "object", "properties": {}},
+}
+
+
+def _sales_system_prompt() -> str:
+    return f"""Du bist ein erfahrener, ehrlicher Verkaufsberater für einen WhatsApp-\
+Astrologie-Service nach dem indischen Lal-Kitab-System. Du sprichst gerade mit \
+einem Interessenten, der noch KEINE Geburtsdaten genannt hat — triff noch KEINE \
+astrologischen Aussagen über ihn persönlich.
+
+Erkläre bei Bedarf ehrlich und konkret, wie der Service funktioniert:
+- Die Planetenpositionen im Moment der Geburt werden mit einem professionellen \
+astronomischen Berechnungsprogramm (Swiss Ephemeris) exakt berechnet — das ist \
+überprüfbare Astronomie/Mathematik, keine Vermutung.
+- Die BEDEUTUNG dieser Positionen wird aus einer etablierten, weit verbreiteten \
+Quelle der Lal-Kitab-Tradition abgeleitet (einem anerkannten historischen Werk \
+dieser astrologischen Schule) — keine frei erfundenen Deutungen.
+- Ablauf: Geburtsdatum, -zeit und -ort → kostenlose kurze Kostprobe (1-2 \
+Erkenntnisse aus der Karte) → bei Interesse ein ausführlicher, persönlicher \
+PDF-Bericht ({Config.REPORT_PRICE_EUR} €) mit vollständiger Charakteranalyse \
+UND einem Stundenkalender für den kommenden Monat (alle 2 Stunden, welcher \
+Lebensbereich gerade betont ist).
+- Der Bericht kann in unterschiedlichem Ton geschrieben werden (warmherzig, \
+humorvoll, sachlich, romantisch) — z.B. auch als Geschenk für jemand anderen \
+gedacht (Partner, Familie, Freund).
+
+Beantworte Fragen ehrlich, ohne Übertreibungen oder falsche Versprechen — keine \
+Aussagen zu Gesundheit/Geld/Recht als Tatsache, das Ganze dient Unterhaltung und \
+Selbstreflexion. Sei sympathisch, natürlich und knapp (2-4 Sätze pro Antwort) — \
+wie ein guter Berater im Gespräch, kein Marketing-Text und kein Frage-Katalog.
+
+Sobald der Nutzer bereit wirkt anzufangen, rufe das Tool 'start_intake' auf UND \
+schreibe zusätzlich eine kurze, einladende Textantwort. Dräng nicht darauf, wenn \
+noch Fragen offen sind."""
+
+
+def generate_sales_reply(birth_data: dict, history: list, user_message: str) -> tuple[str, bool]:
+    """
+    Freies Verkaufsgespräch VOR der Datenerfassung (siehe dialog_manager.
+    _handle_sales_chat). history — Liste von {"role": "user"/"assistant",
+    "content": str} früherer Turns dieses Gesprächs (persistiert in
+    conversation_state.sales_chat_history als JSON).
+
+    Rückgabe: (antwort_text, bereit_fuer_intake) — bereit_fuer_intake ist True,
+    wenn Claude das start_intake-Tool aufgerufen hat (siehe START_INTAKE_TOOL).
+    Ein Tool-Aufruf statt eines Text-Markers ist robuster gegen Prompt-Drift/
+    versehentliches Durchsickern eines Markers in die Nutzer-Antwort.
+    """
+    messages = list(history) + [{"role": "user", "content": user_message}]
+    system = _with_extra_instructions(f"{_sales_system_prompt()}\n\n{_language_directive(birth_data)}")
+
+    response = client.messages.create(
+        model=Config.ANTHROPIC_MODEL,
+        max_tokens=600,
+        system=system,
+        tools=[START_INTAKE_TOOL],
+        messages=messages,
+    )
+    text = "".join(block.text for block in response.content if block.type == "text").strip()
+    ready = any(block.type == "tool_use" and block.name == "start_intake" for block in response.content)
+    return text, ready
+
+
 TEASER_SYSTEM_PROMPT = """Du bist ein erfahrener Lal-Kitab-Astrologe. Du bekommst 1-2 \
 bereits berechnete Lal-Kitab-Befunde aus der Geburtskarte eines Interessenten, der \
 noch NICHT bezahlt hat — erfinde KEINE weiteren astrologischen Fakten.

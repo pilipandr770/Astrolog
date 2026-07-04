@@ -2,6 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import json
 from dataclasses import dataclass
 from unittest.mock import patch
 
@@ -9,6 +10,7 @@ from app.config import Config
 from app.services import dialog_manager
 from app.services.dialog_manager import (
     _capture_language_signal,
+    _handle_sales_chat,
     _handle_style,
     _payment_redirect_urls,
     _pick_teaser_findings,
@@ -122,6 +124,67 @@ def test_handle_style_accepts_valid_digit_and_proceeds():
     mock_state.update.assert_called_once_with("491234567", style="humorous", state="awaiting_payment")
     mock_teaser.assert_called_once()
     mock_payment.assert_called_once()
+
+
+def test_handle_sales_chat_stays_in_chat_when_not_ready():
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager.claude_service, "generate_sales_reply") as mock_reply:
+        mock_reply.return_value = ("Klar, erzähl mir gern, was dich interessiert!", False)
+        _handle_sales_chat("491234567", "Was kostet das denn?", {})
+
+    mock_state.update.assert_called_once()
+    call_kwargs = mock_state.update.call_args
+    assert call_kwargs[0][0] == "491234567"
+    assert call_kwargs[1]["state"] == "sales_chat"
+    saved_history = json.loads(call_kwargs[1]["sales_chat_history"])
+    assert saved_history == [
+        {"role": "user", "content": "Was kostet das denn?"},
+        {"role": "assistant", "content": "Klar, erzähl mir gern, was dich interessiert!"},
+    ]
+    mock_evo.send_text.assert_called_once_with(
+        "491234567", "Klar, erzähl mir gern, was dich interessiert!"
+    )
+
+
+def test_handle_sales_chat_transitions_to_awaiting_date_when_ready():
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager.claude_service, "generate_sales_reply") as mock_reply:
+        mock_reply.return_value = ("Super, dann leg los!", True)
+        _handle_sales_chat("491234567", "Ja, lass uns anfangen", {})
+
+    mock_state.update.assert_called_once_with(
+        "491234567", state="awaiting_date", sales_chat_history=None
+    )
+    assert mock_evo.send_text.call_count == 2
+    assert mock_evo.send_text.call_args_list[0][0][1] == "Super, dann leg los!"
+    assert "Geburtsdatum" in mock_evo.send_text.call_args_list[1][0][1]
+
+
+def test_handle_sales_chat_passes_existing_history_and_caps_length():
+    long_history = [{"role": "user", "content": f"msg{i}"} for i in range(30)]
+    state = {"sales_chat_history": json.dumps(long_history)}
+
+    with patch.object(dialog_manager, "evolution_api"), \
+         patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager.claude_service, "generate_sales_reply") as mock_reply:
+        mock_reply.return_value = ("Antwort", False)
+        _handle_sales_chat("491234567", "weiter", state)
+
+    assert mock_reply.call_args[0][1] == long_history
+    saved_history = json.loads(mock_state.update.call_args[1]["sales_chat_history"])
+    assert len(saved_history) <= dialog_manager.MAX_SALES_HISTORY_TURNS * 2
+
+
+def test_handle_sales_chat_handles_claude_error_gracefully():
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager.claude_service, "generate_sales_reply", side_effect=RuntimeError("boom")):
+        _handle_sales_chat("491234567", "Hallo", {})
+
+    mock_state.update.assert_not_called()
+    mock_evo.send_text.assert_called_once()
 
 
 def test_extract_text_audio_uses_evolution_base64_not_encrypted_url():
