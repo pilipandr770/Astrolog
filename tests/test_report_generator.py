@@ -61,7 +61,10 @@ def test_generate_and_send_report_happy_path(tmp_path):
     }
     assert mock_pdf.call_args.kwargs["calendar"] == fake_calendar
     mock_doc.assert_called_once()
-    mock_update.assert_called_once_with("491234567", state="report_sent")
+    mock_update.assert_called_once_with(
+        "491234567", state="report_sent", last_interpretation="Text",
+        post_report_chat_history=None,
+    )
 
 
 def test_generate_and_send_report_survives_calendar_failure(tmp_path):
@@ -79,7 +82,10 @@ def test_generate_and_send_report_survives_calendar_failure(tmp_path):
 
     assert mock_claude.call_args.kwargs["calendar_highlights"] is None
     assert mock_pdf.call_args.kwargs["calendar"] is None
-    mock_update.assert_called_once_with("491234567", state="report_sent")
+    mock_update.assert_called_once_with(
+        "491234567", state="report_sent", last_interpretation="Text",
+        post_report_chat_history=None,
+    )
 
 
 def test_short_place_keeps_city_and_country():

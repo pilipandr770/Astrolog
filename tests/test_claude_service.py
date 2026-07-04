@@ -87,3 +87,25 @@ def test_generate_sales_reply_includes_prior_history_in_messages():
     assert sent_messages[0] == history[0]
     assert sent_messages[1] == history[1]
     assert sent_messages[2] == {"role": "user", "content": "Was genau macht ihr?"}
+
+
+def test_generate_post_report_reply_includes_report_context_and_history():
+    fake_block = type("Block", (), {"type": "text", "text": "Klar, das heisst..."})()
+    fake_response = type("Response", (), {"content": [fake_block]})()
+    history = [{"role": "user", "content": "Danke fuer den Bericht!"}]
+
+    with patch.object(claude_service.settings, "get_setting", return_value=""), \
+         patch.object(claude_service.client.messages, "create", return_value=fake_response) as mock_create:
+        result = claude_service.generate_post_report_reply(
+            {"style": "warm"},
+            "Dein Mond steht im 4. Haus und bedeutet finanziellen Wandel.",
+            history,
+            "Was heisst das fuer meine Finanzen?",
+        )
+
+    assert result == "Klar, das heisst..."
+    system_prompt = mock_create.call_args.kwargs["system"]
+    assert "Dein Mond steht im 4. Haus" in system_prompt
+    sent_messages = mock_create.call_args.kwargs["messages"]
+    assert sent_messages[0] == history[0]
+    assert sent_messages[-1] == {"role": "user", "content": "Was heisst das fuer meine Finanzen?"}

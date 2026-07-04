@@ -201,6 +201,58 @@ medizinische, rechtliche oder finanzielle Beratung ersetzt (in derselben Sprache
 wie der Rest der Auswertung)."""
 
 
+def _post_report_system_prompt() -> str:
+    return """Du bist die dritte von drei Rollen in diesem Service: nach dem \
+Verkaufsberater (Rolle 1) und dem Astrologen, der Karte und Bericht erstellt hat \
+(Rolle 2), bist du jetzt der persönliche Lal-Kitab-Astrologe UND Coach, der den \
+Kunden NACH Erhalt seines bezahlten PDF-Berichts begleitet.
+
+Der Kunde hat seinen Bericht bereits gelesen (der genaue Text steht unten als \
+Referenz). Deine Aufgabe:
+- Beantworte Rückfragen zum Bericht ehrlich und konkret — beziehe dich auf das, \
+was tatsächlich in seinem Bericht steht (Positionen, Häuser, Befunde, Empfehlungen, \
+Kalender-Hinweise). Erfinde KEINE neuen astrologischen Fakten, die nicht aus dem \
+Berichtstext oder den unten gelisteten Rohdaten hervorgehen.
+- Hilf ihm, die Ergebnisse im Alltag sinnvoll anzuwenden — konkret, praktisch, \
+nicht nur theoretisch.
+- Sei dabei wie ein guter Coach: ermutigend, motivierend, positiv — aber ehrlich, \
+ohne Übertreibungen oder erfundene Erfolgsversprechen. Keine Tatsachenbehauptungen \
+zu Gesundheit, Geld oder Recht — das bleibt Unterhaltung und Selbstreflexion.
+- Halte Antworten kurz und im Gesprächston (wenige Sätze), nicht wie ein neuer \
+Fließtext-Bericht.
+
+Falls der Kunde erkennen lässt, dass er eine KOMPLETT NEUE Auswertung möchte (z.B. \
+für eine andere Person), weise ihn darauf hin, dass er dafür 'neu' schreiben kann."""
+
+
+def generate_post_report_reply(
+    birth_data: dict, report_context: str, history: list, user_message: str
+) -> str:
+    """
+    Nachbetreuungs-Chat (dritte Rolle, siehe _post_report_system_prompt) —
+    aktiv sobald conversation_state.state == "report_sent". report_context ist
+    der gespeicherte Interpretationstext (conversation_state.last_interpretation),
+    NICHT neu aus den Rohdaten generiert, damit Antworten konsistent zum
+    tatsächlich gelesenen Bericht bleiben. history — wie bei
+    generate_sales_reply persistiert in conversation_state (post_report_chat_history).
+    """
+    messages = list(history) + [{"role": "user", "content": user_message}]
+    system = _with_extra_instructions(
+        f"{_post_report_system_prompt()}\n\n"
+        f"{_language_directive(birth_data)}\n\n"
+        f"Stil-Anweisung: {get_style_instruction(birth_data.get('style'))}\n\n"
+        f"Der Bericht des Kunden (bereits erhalten):\n{report_context}"
+    )
+
+    response = client.messages.create(
+        model=Config.ANTHROPIC_MODEL,
+        max_tokens=500,
+        system=system,
+        messages=messages,
+    )
+    return "".join(block.text for block in response.content if block.type == "text")
+
+
 def _format_finding(f) -> str:
     lines = [f"### {f.title}", f.summary]
     if f.benefit_effects:

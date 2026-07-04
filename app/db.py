@@ -28,6 +28,14 @@ CREATE TABLE IF NOT EXISTS conversations (
     -- Datenerfassung beginnt. Wird beim Übergang zu awaiting_date/bei
     -- Reset wieder geleert.
     sales_chat_history TEXT,
+    -- Text der zuletzt an den Kunden gesendeten Auswertung (siehe
+    -- report_generator.py) — Grundlage für die Nachbetreuung (dritte Rolle:
+    -- Astrologe/Coach, dialog_manager._handle_post_report_chat), damit
+    -- Rückfragen konsistent zum tatsächlich gelesenen Bericht beantwortet
+    -- werden, statt die Karte neu zu interpretieren.
+    last_interpretation TEXT,
+    -- JSON-Liste der Nachbetreuungs-Turns, analog sales_chat_history.
+    post_report_chat_history TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -68,5 +76,7 @@ def init_db():
     _ensure_column(conn, "conversations", "language_sample", "TEXT")
     _ensure_column(conn, "conversations", "style", "TEXT")
     _ensure_column(conn, "conversations", "sales_chat_history", "TEXT")
+    _ensure_column(conn, "conversations", "last_interpretation", "TEXT")
+    _ensure_column(conn, "conversations", "post_report_chat_history", "TEXT")
     conn.commit()
     conn.close()

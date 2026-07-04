@@ -56,6 +56,10 @@ _STYLE_ORDER = ["warm", "humorous", "business", "romantic"]
 # unbegrenztes Token-Wachstum bei sehr gesprächigen Interessenten.
 MAX_SALES_HISTORY_TURNS = 8
 
+# Dasselbe für die Nachbetreuung nach Berichtsversand (siehe
+# _handle_post_report_chat).
+MAX_POST_REPORT_HISTORY_TURNS = 8
+
 
 def handle_message(phone: str, message: dict) -> None:
     text = _extract_text(phone, message)
@@ -78,6 +82,8 @@ def handle_message(phone: str, message: dict) -> None:
             paid=0,
             stripe_session_id=None,
             sales_chat_history=None,
+            last_interpretation=None,
+            post_report_chat_history=None,
         )
         state = conversation_state.get_or_create(phone)
 
@@ -109,11 +115,7 @@ def handle_message(phone: str, message: dict) -> None:
         )
         report_generator.generate_and_send_report(phone)
     elif current == "report_sent":
-        evolution_api.send_text(
-            phone,
-            "Dein Bericht wurde bereits gesendet. Wenn du eine neue Auswertung "
-            "möchtest (z. B. für eine andere Person), schreib 'neu'.",
-        )
+        _handle_post_report_chat(phone, text, state)
     else:
         logger.warning("Unbekannter Zustand '%s' für %s", current, phone)
         _handle_sales_chat(phone, text, state)
@@ -209,6 +211,45 @@ def _handle_sales_chat(phone: str, text: str, state: dict) -> None:
             phone, state="sales_chat", sales_chat_history=json.dumps(history)
         )
         evolution_api.send_text(phone, reply_text)
+
+
+def _handle_post_report_chat(phone: str, text: str, state: dict) -> None:
+    """
+    Dritte Rolle (siehe claude_service._post_report_system_prompt): Astrologe
+    & Coach, der nach Berichtsversand Rückfragen beantwortet und beim
+    Anwenden der Ergebnisse hilft. Aktiv im Zustand "report_sent".
+    """
+    history = json.loads(state.get("post_report_chat_history") or "[]")
+    report_context = state.get("last_interpretation") or (
+        "(Kein gespeicherter Berichtstext vorhanden — antworte allgemein und "
+        "verweise bei Bedarf darauf, dass der Kunde Ausschnitte aus seinem "
+        "PDF zitieren kann.)"
+    )
+
+    try:
+        reply_text = claude_service.generate_post_report_reply(
+            state, report_context, history, text
+        )
+    except Exception:
+        logger.exception("Nachbetreuungs-Antwort fehlgeschlagen für %s", phone)
+        evolution_api.send_text(
+            phone,
+            "Entschuldige, gerade gab es ein technisches Problem. Kannst du "
+            "deine Frage bitte noch einmal schreiben?",
+        )
+        return
+
+    if not reply_text:
+        reply_text = "Magst du deine Frage etwas genauer beschreiben?"
+
+    history = history + [
+        {"role": "user", "content": text},
+        {"role": "assistant", "content": reply_text},
+    ]
+    history = history[-(MAX_POST_REPORT_HISTORY_TURNS * 2):]
+
+    conversation_state.update(phone, post_report_chat_history=json.dumps(history))
+    evolution_api.send_text(phone, reply_text)
 
 
 def _handle_date(phone: str, text: str) -> None:

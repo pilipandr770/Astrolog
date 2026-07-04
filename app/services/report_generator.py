@@ -149,6 +149,12 @@ def _generate_and_send(phone: str) -> bool:
             logger.exception("Fehlerbenachrichtigung an %s fehlgeschlagen", phone)
         return False
 
-    conversation_state.update(phone, state="report_sent")
+    # last_interpretation: Grundlage für die Nachbetreuung (dritte Rolle,
+    # siehe dialog_manager._handle_post_report_chat) — Rückfragen werden
+    # gegen den TATSÄCHLICH gelesenen Text beantwortet statt neu interpretiert.
+    conversation_state.update(
+        phone, state="report_sent", last_interpretation=interpretation,
+        post_report_chat_history=None,
+    )
     logger.info("Bericht erfolgreich an %s gesendet.", phone)
     return True

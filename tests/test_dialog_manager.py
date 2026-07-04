@@ -10,6 +10,7 @@ from app.config import Config
 from app.services import dialog_manager
 from app.services.dialog_manager import (
     _capture_language_signal,
+    _handle_post_report_chat,
     _handle_sales_chat,
     _handle_style,
     _payment_redirect_urls,
@@ -182,6 +183,48 @@ def test_handle_sales_chat_handles_claude_error_gracefully():
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager.claude_service, "generate_sales_reply", side_effect=RuntimeError("boom")):
         _handle_sales_chat("491234567", "Hallo", {})
+
+    mock_state.update.assert_not_called()
+    mock_evo.send_text.assert_called_once()
+
+
+def test_handle_post_report_chat_uses_stored_interpretation_and_saves_history():
+    state = {"last_interpretation": "Dein Mond steht im 4. Haus...", "post_report_chat_history": None}
+
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager.claude_service, "generate_post_report_reply") as mock_reply:
+        mock_reply.return_value = "Das bedeutet, dass..."
+        _handle_post_report_chat("491234567", "Was bedeutet mein Mondhaus?", state)
+
+    mock_reply.assert_called_once_with(
+        state, "Dein Mond steht im 4. Haus...", [], "Was bedeutet mein Mondhaus?"
+    )
+    mock_evo.send_text.assert_called_once_with("491234567", "Das bedeutet, dass...")
+    saved_history = json.loads(mock_state.update.call_args[1]["post_report_chat_history"])
+    assert saved_history == [
+        {"role": "user", "content": "Was bedeutet mein Mondhaus?"},
+        {"role": "assistant", "content": "Das bedeutet, dass..."},
+    ]
+
+
+def test_handle_post_report_chat_falls_back_without_stored_report():
+    state = {}
+
+    with patch.object(dialog_manager, "evolution_api"), \
+         patch.object(dialog_manager, "conversation_state"), \
+         patch.object(dialog_manager.claude_service, "generate_post_report_reply") as mock_reply:
+        mock_reply.return_value = "Antwort"
+        _handle_post_report_chat("491234567", "Frage", state)
+
+    assert "Kein gespeicherter Berichtstext" in mock_reply.call_args[0][1]
+
+
+def test_handle_post_report_chat_handles_claude_error_gracefully():
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager.claude_service, "generate_post_report_reply", side_effect=RuntimeError("boom")):
+        _handle_post_report_chat("491234567", "Frage", {})
 
     mock_state.update.assert_not_called()
     mock_evo.send_text.assert_called_once()
