@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import json
 from dataclasses import dataclass
+from datetime import date
 from unittest.mock import patch
 
 from app.config import Config
@@ -189,16 +190,24 @@ def test_handle_sales_chat_handles_claude_error_gracefully():
 
 
 def test_handle_post_report_chat_uses_stored_interpretation_and_saves_history():
-    state = {"last_interpretation": "Dein Mond steht im 4. Haus...", "post_report_chat_history": None}
+    state = {
+        "last_interpretation": "Dein Mond steht im 4. Haus...",
+        "post_report_chat_history": None,
+        "report_calendar_end_date": "2026-08-02",
+    }
 
+    fake_snapshot = {"date": date.today(), "blocks": []}
     with patch.object(dialog_manager, "evolution_api") as mock_evo, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager.report_generator, "compute_today_snapshot", return_value=fake_snapshot), \
          patch.object(dialog_manager.claude_service, "generate_post_report_reply") as mock_reply:
-        mock_reply.return_value = "Das bedeutet, dass..."
+        mock_reply.return_value = ("Das bedeutet, dass...", False)
         _handle_post_report_chat("491234567", "Was bedeutet mein Mondhaus?", state)
 
     mock_reply.assert_called_once_with(
-        state, "Dein Mond steht im 4. Haus...", [], "Was bedeutet mein Mondhaus?"
+        state, "Dein Mond steht im 4. Haus...", [], "Was bedeutet mein Mondhaus?",
+        calendar_end_date="2026-08-02", today_str=date.today().isoformat(),
+        today_snapshot=fake_snapshot,
     )
     mock_evo.send_text.assert_called_once_with("491234567", "Das bedeutet, dass...")
     saved_history = json.loads(mock_state.update.call_args[1]["post_report_chat_history"])
@@ -213,8 +222,9 @@ def test_handle_post_report_chat_falls_back_without_stored_report():
 
     with patch.object(dialog_manager, "evolution_api"), \
          patch.object(dialog_manager, "conversation_state"), \
+         patch.object(dialog_manager.report_generator, "compute_today_snapshot", return_value=None), \
          patch.object(dialog_manager.claude_service, "generate_post_report_reply") as mock_reply:
-        mock_reply.return_value = "Antwort"
+        mock_reply.return_value = ("Antwort", False)
         _handle_post_report_chat("491234567", "Frage", state)
 
     assert "Kein gespeicherter Berichtstext" in mock_reply.call_args[0][1]
@@ -223,11 +233,42 @@ def test_handle_post_report_chat_falls_back_without_stored_report():
 def test_handle_post_report_chat_handles_claude_error_gracefully():
     with patch.object(dialog_manager, "evolution_api") as mock_evo, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager.report_generator, "compute_today_snapshot", return_value=None), \
          patch.object(dialog_manager.claude_service, "generate_post_report_reply", side_effect=RuntimeError("boom")):
         _handle_post_report_chat("491234567", "Frage", {})
 
     mock_state.update.assert_not_called()
     mock_evo.send_text.assert_called_once()
+
+
+def test_handle_post_report_chat_triggers_renewal_when_customer_agrees():
+    state = {
+        "birth_date": "1990-05-15", "birth_time": "14:30", "birth_place": "Berlin",
+        "last_interpretation": "Bericht-Text", "post_report_chat_history": None,
+    }
+
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager.report_generator, "compute_today_snapshot", return_value=None), \
+         patch.object(dialog_manager.claude_service, "generate_post_report_reply") as mock_reply, \
+         patch.object(dialog_manager, "_send_payment_link") as mock_payment:
+        mock_reply.return_value = ("Perfekt, ich erstelle dir die Fortsetzung!", True)
+        mock_state.get_or_create.return_value = state
+        _handle_post_report_chat("491234567", "Ja, mach das bitte", state)
+
+    mock_evo.send_text.assert_called_once_with(
+        "491234567", "Perfekt, ich erstelle dir die Fortsetzung!"
+    )
+    mock_state.update.assert_called_once_with(
+        "491234567",
+        state="awaiting_payment",
+        paid=0,
+        stripe_session_id=None,
+        last_interpretation=None,
+        post_report_chat_history=None,
+        report_calendar_end_date=None,
+    )
+    mock_payment.assert_called_once_with("491234567", state, with_summary=True)
 
 
 def test_extract_text_audio_uses_evolution_base64_not_encrypted_url():

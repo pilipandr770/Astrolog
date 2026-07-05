@@ -18,7 +18,7 @@ _GENERATING — примитивная защита от параллельно�
 import logging
 import os
 import threading
-from datetime import date
+from datetime import date, timedelta
 
 from app.config import Config
 from app.models import conversation_state
@@ -38,6 +38,27 @@ _GENERATING_LOCK = threading.Lock()
 REPORTS_DIR = os.path.join(os.path.dirname(Config.DATABASE_PATH), "reports")
 
 CALENDAR_DAYS = 30
+
+
+def compute_today_snapshot(state: dict) -> dict | None:
+    """
+    Liefert die 2-Stunden-Blöcke des HEUTIGEN Tages (siehe
+    transit_forecast.build_monthly_calendar) für den Coach (dritte Rolle,
+    dialog_manager._handle_post_report_chat) — z.B. wenn der Kunde konkret
+    nach "heute" fragt. Nur 1 Tag statt der vollen 30-Tage-Reichweite, damit
+    das bei jeder Chat-Nachricht günstig genug ist. None bei Fehlern —
+    der Coach antwortet dann ohne Tagesdetails, statt die Antwort zu blockieren.
+    """
+    try:
+        chart = natal_chart.compute(state)
+        calendar = transit_forecast.build_monthly_calendar(
+            chart, state["birth_lat"], state["birth_lon"], state["birth_tz"],
+            start_date=date.today(), days=1,
+        )
+        return calendar[0] if calendar else None
+    except Exception:
+        logger.exception("Tages-Snapshot fehlgeschlagen für Bericht-Chat")
+        return None
 
 
 def _short_place(display_name: str) -> str:
@@ -85,16 +106,19 @@ def _generate_and_send(phone: str) -> bool:
         # sind nicht fatal — der Bericht geht dann ohne Kalender raus.
         calendar = None
         highlights = None
+        calendar_end_date = None
         try:
+            calendar_start = date.today()
             calendar = transit_forecast.build_monthly_calendar(
                 chart,
                 state["birth_lat"],
                 state["birth_lon"],
                 state["birth_tz"],
-                start_date=date.today(),
+                start_date=calendar_start,
                 days=CALENDAR_DAYS,
             )
             highlights = transit_forecast.pick_highlights(calendar)
+            calendar_end_date = calendar_start + timedelta(days=CALENDAR_DAYS - 1)
         except Exception:
             logger.exception(
                 "Monatskalender-Berechnung fehlgeschlagen für %s — Bericht ohne Kalender", phone
@@ -155,6 +179,7 @@ def _generate_and_send(phone: str) -> bool:
     conversation_state.update(
         phone, state="report_sent", last_interpretation=interpretation,
         post_report_chat_history=None,
+        report_calendar_end_date=calendar_end_date.isoformat() if calendar_end_date else None,
     )
     logger.info("Bericht erfolgreich an %s gesendet.", phone)
     return True

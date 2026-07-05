@@ -36,6 +36,10 @@ CREATE TABLE IF NOT EXISTS conversations (
     last_interpretation TEXT,
     -- JSON-Liste der Nachbetreuungs-Turns, analog sales_chat_history.
     post_report_chat_history TEXT,
+    -- Letzter durch den Monats-Kalender abgedeckter Tag (ISO-Datum) — der
+    -- Coach (dritte Rolle) nutzt das, um ehrlich zu wissen, wann die
+    -- aktuelle Auswertung "ausläuft", statt zu raten.
+    report_calendar_end_date TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -78,5 +82,6 @@ def init_db():
     _ensure_column(conn, "conversations", "sales_chat_history", "TEXT")
     _ensure_column(conn, "conversations", "last_interpretation", "TEXT")
     _ensure_column(conn, "conversations", "post_report_chat_history", "TEXT")
+    _ensure_column(conn, "conversations", "report_calendar_end_date", "TEXT")
     conn.commit()
     conn.close()

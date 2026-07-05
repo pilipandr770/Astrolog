@@ -201,8 +201,56 @@ medizinische, rechtliche oder finanzielle Beratung ersetzt (in derselben Sprache
 wie der Rest der Auswertung)."""
 
 
-def _post_report_system_prompt() -> str:
-    return """Du bist die dritte von drei Rollen in diesem Service: nach dem \
+START_RENEWAL_TOOL = {
+    "name": "start_renewal",
+    "description": (
+        "Aufrufen, wenn der Kunde zustimmt, eine neue Monats-Auswertung "
+        "(Fortsetzung) zu bestellen, nachdem du ihm das angeboten hast. NICHT "
+        "aufrufen, wenn er nur allgemein interessiert klingt, aber noch nicht "
+        "konkret zugestimmt hat, oder wenn er ablehnt/zögert."
+    ),
+    "input_schema": {"type": "object", "properties": {}},
+}
+
+
+def _format_today_snapshot(today_snapshot: dict | None) -> str:
+    """
+    today_snapshot — ein Tages-Eintrag aus transit_forecast.build_monthly_
+    calendar() (siehe report_generator.compute_today_snapshot), NICHT der
+    volle Monat — nur die konkreten Blöcke für HEUTE, damit der Coach
+    Fragen wie "wie wird mein Tag heute?" mit echten Daten statt nur der
+    allgemeinen Monats-Zusammenfassung beantworten kann.
+    """
+    if not today_snapshot:
+        return ""
+
+    lines = []
+    for block in today_snapshot.get("blocks", []):
+        content = block.get("content")
+        if not content:
+            continue
+        source = "Transit" if content["source"] == "transit" else "natal"
+        lines.append(
+            f"- {block['start_hour']:02d}:00–{block['end_hour']:02d}:00 Uhr: "
+            f"{content['planet']} ({source}, {content['rule'].get('severity', 'neutral')}) — "
+            f"{content['rule'].get('summary', '')}"
+        )
+    if not lines:
+        return ""
+
+    day_label = today_snapshot["date"].strftime("%d.%m.%Y") if today_snapshot.get("date") else "heute"
+    return f"\n\nDetaillierte Blöcke für HEUTE ({day_label}), nutze das für Fragen zum heutigen Tag:\n" + "\n".join(lines)
+
+
+def _post_report_system_prompt(calendar_end_date: str | None, today_str: str) -> str:
+    coverage_note = (
+        f"Der Monats-Kalender seines Berichts deckt Ereignisse bis einschließlich "
+        f"{calendar_end_date} ab. Heutiges Datum: {today_str}."
+        if calendar_end_date
+        else f"Heutiges Datum: {today_str}. (Kein gespeichertes Enddatum für den "
+        "Kalender vorhanden.)"
+    )
+    return f"""Du bist die dritte von drei Rollen in diesem Service: nach dem \
 Verkaufsberater (Rolle 1) und dem Astrologen, der Karte und Bericht erstellt hat \
 (Rolle 2), bist du jetzt der persönliche Lal-Kitab-Astrologe UND Coach, der den \
 Kunden NACH Erhalt seines bezahlten PDF-Berichts begleitet.
@@ -220,14 +268,36 @@ ohne Übertreibungen oder erfundene Erfolgsversprechen. Keine Tatsachenbehauptun
 zu Gesundheit, Geld oder Recht — das bleibt Unterhaltung und Selbstreflexion.
 - Halte Antworten kurz und im Gesprächston (wenige Sätze), nicht wie ein neuer \
 Fließtext-Bericht.
+- Du kennst das heutige Datum (siehe unten) und ggf. die konkreten Blöcke des \
+heutigen Tages. Wenn der Kunde nach "heute"/"jetzt"/einem bestimmten Datum fragt, \
+nutze diese konkreten Daten statt nur die allgemeine Monats-Zusammenfassung aus \
+dem Bericht zu wiederholen — das macht die Antwort spürbar persönlicher.
 
-Falls der Kunde erkennen lässt, dass er eine KOMPLETT NEUE Auswertung möchte (z.B. \
-für eine andere Person), weise ihn darauf hin, dass er dafür 'neu' schreiben kann."""
+Kundenbindung: {coverage_note} Der Kalender/Bericht gilt NUR für diesen einen \
+Monat. Wenn der Kunde nach einem Datum FRAGT, das außerhalb dieses Zeitraums \
+liegt, oder das Gespräch sich dem natürlichen Ende nähert (z.B. er bedankt sich, \
+verabschiedet sich, oder der abgedeckte Zeitraum ist bereits vorbei/läuft bald \
+ab), erwähne freundlich und beiläufig — NICHT bei jeder Nachricht, höchstens \
+gelegentlich —, dass du gerne eine neue Monats-Auswertung (Fortsetzung) für ihn \
+erstellst, sobald er möchte; seine Geburtsdaten hat er bereits hinterlegt, es \
+braucht also keine erneute Eingabe. Wenn der Kunde daraufhin konkret zustimmt \
+(z.B. "ja gerne", "mach das"), rufe das Tool 'start_renewal' auf UND schreibe \
+zusätzlich eine kurze, bestätigende Textantwort.
+
+Falls der Kunde erkennen lässt, dass er eine KOMPLETT NEUE Auswertung für eine \
+ANDERE Person möchte, weise ihn darauf hin, dass er dafür 'neu' schreiben kann \
+(das setzt auch die Geburtsdaten zurück, anders als die Fortsetzung)."""
 
 
 def generate_post_report_reply(
-    birth_data: dict, report_context: str, history: list, user_message: str
-) -> str:
+    birth_data: dict,
+    report_context: str,
+    history: list,
+    user_message: str,
+    calendar_end_date: str | None = None,
+    today_str: str = "",
+    today_snapshot: dict | None = None,
+) -> tuple[str, bool]:
     """
     Nachbetreuungs-Chat (dritte Rolle, siehe _post_report_system_prompt) —
     aktiv sobald conversation_state.state == "report_sent". report_context ist
@@ -235,22 +305,30 @@ def generate_post_report_reply(
     NICHT neu aus den Rohdaten generiert, damit Antworten konsistent zum
     tatsächlich gelesenen Bericht bleiben. history — wie bei
     generate_sales_reply persistiert in conversation_state (post_report_chat_history).
+
+    Rückgabe: (antwort_text, will_verlaengern) — will_verlaengern ist True, wenn
+    Claude das start_renewal-Tool aufgerufen hat (Kunde hat einer neuen
+    Monats-Auswertung zugestimmt, siehe START_RENEWAL_TOOL).
     """
     messages = list(history) + [{"role": "user", "content": user_message}]
     system = _with_extra_instructions(
-        f"{_post_report_system_prompt()}\n\n"
+        f"{_post_report_system_prompt(calendar_end_date, today_str)}\n\n"
         f"{_language_directive(birth_data)}\n\n"
         f"Stil-Anweisung: {get_style_instruction(birth_data.get('style'))}\n\n"
         f"Der Bericht des Kunden (bereits erhalten):\n{report_context}"
+        f"{_format_today_snapshot(today_snapshot)}"
     )
 
     response = client.messages.create(
         model=Config.ANTHROPIC_MODEL,
         max_tokens=500,
         system=system,
+        tools=[START_RENEWAL_TOOL],
         messages=messages,
     )
-    return "".join(block.text for block in response.content if block.type == "text")
+    text = "".join(block.text for block in response.content if block.type == "text")
+    renew = any(block.type == "tool_use" and block.name == "start_renewal" for block in response.content)
+    return text, renew
 
 
 def _format_finding(f) -> str:

@@ -225,10 +225,20 @@ def _handle_post_report_chat(phone: str, text: str, state: dict) -> None:
         "verweise bei Bedarf darauf, dass der Kunde Ausschnitte aus seinem "
         "PDF zitieren kann.)"
     )
+    # Konkrete Blöcke für HEUTE (nicht nur die Monats-Zusammenfassung) — macht
+    # Antworten auf "wie wird mein Tag heute?" spürbar persönlicher. Fehler
+    # hier blockieren die Antwort NICHT (siehe compute_today_snapshot).
+    today_snapshot = report_generator.compute_today_snapshot(state)
 
     try:
-        reply_text = claude_service.generate_post_report_reply(
-            state, report_context, history, text
+        reply_text, renew = claude_service.generate_post_report_reply(
+            state,
+            report_context,
+            history,
+            text,
+            calendar_end_date=state.get("report_calendar_end_date"),
+            today_str=date.today().isoformat(),
+            today_snapshot=today_snapshot,
         )
     except Exception:
         logger.exception("Nachbetreuungs-Antwort fehlgeschlagen für %s", phone)
@@ -248,8 +258,34 @@ def _handle_post_report_chat(phone: str, text: str, state: dict) -> None:
     ]
     history = history[-(MAX_POST_REPORT_HISTORY_TURNS * 2):]
 
-    conversation_state.update(phone, post_report_chat_history=json.dumps(history))
-    evolution_api.send_text(phone, reply_text)
+    if renew:
+        evolution_api.send_text(phone, reply_text)
+        _handle_renewal(phone, state)
+    else:
+        conversation_state.update(phone, post_report_chat_history=json.dumps(history))
+        evolution_api.send_text(phone, reply_text)
+
+
+def _handle_renewal(phone: str, state: dict) -> None:
+    """
+    Kundenbindung (siehe claude_service._post_report_system_prompt): der
+    Kunde hat einer neuen Monats-Auswertung zugestimmt. Geburtsdaten/Stil
+    bleiben erhalten (kein erneutes Abfragen) — nur die zahlungs- und
+    berichtsbezogenen Felder werden zurückgesetzt, dann direkt ein neuer
+    Zahlungslink verschickt (kein neuer Teaser, der Kunde kennt den Service
+    bereits).
+    """
+    conversation_state.update(
+        phone,
+        state="awaiting_payment",
+        paid=0,
+        stripe_session_id=None,
+        last_interpretation=None,
+        post_report_chat_history=None,
+        report_calendar_end_date=None,
+    )
+    state = conversation_state.get_or_create(phone)
+    _send_payment_link(phone, state, with_summary=True)
 
 
 def _handle_date(phone: str, text: str) -> None:

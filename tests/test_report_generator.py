@@ -2,6 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from datetime import date, timedelta
 from unittest.mock import patch
 
 from app.services import report_generator
@@ -61,9 +62,10 @@ def test_generate_and_send_report_happy_path(tmp_path):
     }
     assert mock_pdf.call_args.kwargs["calendar"] == fake_calendar
     mock_doc.assert_called_once()
+    expected_end_date = (date.today() + timedelta(days=report_generator.CALENDAR_DAYS - 1)).isoformat()
     mock_update.assert_called_once_with(
         "491234567", state="report_sent", last_interpretation="Text",
-        post_report_chat_history=None,
+        post_report_chat_history=None, report_calendar_end_date=expected_end_date,
     )
 
 
@@ -84,7 +86,7 @@ def test_generate_and_send_report_survives_calendar_failure(tmp_path):
     assert mock_pdf.call_args.kwargs["calendar"] is None
     mock_update.assert_called_once_with(
         "491234567", state="report_sent", last_interpretation="Text",
-        post_report_chat_history=None,
+        post_report_chat_history=None, report_calendar_end_date=None,
     )
 
 
@@ -148,3 +150,20 @@ def test_generate_and_send_report_skips_concurrent_duplicate():
         mock_get.assert_not_called()
     finally:
         report_generator._GENERATING.discard("491234567")
+
+
+def test_compute_today_snapshot_returns_first_day_of_single_day_calendar():
+    fake_calendar = [{"date": date.today(), "slow_transits": {}, "blocks": [{"start_hour": 0}]}]
+
+    with patch.object(report_generator.natal_chart, "compute", return_value=_fake_chart()), \
+         patch.object(report_generator.transit_forecast, "build_monthly_calendar", return_value=fake_calendar) as mock_cal:
+        result = report_generator.compute_today_snapshot(_paid_state())
+
+    assert result == fake_calendar[0]
+    assert mock_cal.call_args.kwargs["days"] == 1
+    assert mock_cal.call_args.kwargs["start_date"] == date.today()
+
+
+def test_compute_today_snapshot_returns_none_on_error():
+    with patch.object(report_generator.natal_chart, "compute", side_effect=RuntimeError("swe")):
+        assert report_generator.compute_today_snapshot(_paid_state()) is None
