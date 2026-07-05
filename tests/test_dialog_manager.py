@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import patch
 
 from app.config import Config
@@ -196,17 +196,20 @@ def test_handle_post_report_chat_uses_stored_interpretation_and_saves_history():
         "report_calendar_end_date": "2026-08-02",
     }
 
-    fake_snapshot = {"date": date.today(), "blocks": []}
+    fake_now = datetime(2026, 7, 5, 14, 32, tzinfo=dialog_manager.BERLIN_TZ)
+    fake_snapshot = {"date": date(2026, 7, 5), "blocks": []}
     with patch.object(dialog_manager, "evolution_api") as mock_evo, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
-         patch.object(dialog_manager.report_generator, "compute_today_snapshot", return_value=fake_snapshot), \
+         patch.object(dialog_manager, "_now_in_berlin", return_value=fake_now), \
+         patch.object(dialog_manager.report_generator, "compute_today_snapshot", return_value=fake_snapshot) as mock_snap, \
          patch.object(dialog_manager.claude_service, "generate_post_report_reply") as mock_reply:
         mock_reply.return_value = ("Das bedeutet, dass...", False)
         _handle_post_report_chat("491234567", "Was bedeutet mein Mondhaus?", state)
 
+    mock_snap.assert_called_once_with(state, target_date=date(2026, 7, 5))
     mock_reply.assert_called_once_with(
         state, "Dein Mond steht im 4. Haus...", [], "Was bedeutet mein Mondhaus?",
-        calendar_end_date="2026-08-02", today_str=date.today().isoformat(),
+        calendar_end_date="2026-08-02", now_str="05.07.2026 14:32 Uhr (Europe/Berlin)",
         today_snapshot=fake_snapshot,
     )
     mock_evo.send_text.assert_called_once_with("491234567", "Das bedeutet, dass...")

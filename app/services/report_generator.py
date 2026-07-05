@@ -40,20 +40,24 @@ REPORTS_DIR = os.path.join(os.path.dirname(Config.DATABASE_PATH), "reports")
 CALENDAR_DAYS = 30
 
 
-def compute_today_snapshot(state: dict) -> dict | None:
+def compute_today_snapshot(state: dict, target_date: date | None = None) -> dict | None:
     """
-    Liefert die 2-Stunden-Blöcke des HEUTIGEN Tages (siehe
-    transit_forecast.build_monthly_calendar) für den Coach (dritte Rolle,
-    dialog_manager._handle_post_report_chat) — z.B. wenn der Kunde konkret
-    nach "heute" fragt. Nur 1 Tag statt der vollen 30-Tage-Reichweite, damit
-    das bei jeder Chat-Nachricht günstig genug ist. None bei Fehlern —
-    der Coach antwortet dann ohne Tagesdetails, statt die Antwort zu blockieren.
+    Liefert die 2-Stunden-Blöcke EINES Tages (siehe transit_forecast.
+    build_monthly_calendar) für den Coach (dritte Rolle, dialog_manager.
+    _handle_post_report_chat) — z.B. wenn der Kunde konkret nach "heute"
+    fragt. Nur 1 Tag statt der vollen 30-Tage-Reichweite, damit das bei
+    jeder Chat-Nachricht günstig genug ist. None bei Fehlern — der Coach
+    antwortet dann ohne Tagesdetails, statt die Antwort zu blockieren.
+
+    target_date — vom Aufrufer übergeben (siehe dialog_manager._now_in_berlin),
+    NICHT hier per date.today() bestimmt: der Server läuft oft in UTC, das
+    würde nachts (Berliner Zeit) ein falsches Kalenderdatum liefern.
     """
     try:
         chart = natal_chart.compute(state)
         calendar = transit_forecast.build_monthly_calendar(
             chart, state["birth_lat"], state["birth_lon"], state["birth_tz"],
-            start_date=date.today(), days=1,
+            start_date=target_date or date.today(), days=1,
         )
         return calendar[0] if calendar else None
     except Exception:

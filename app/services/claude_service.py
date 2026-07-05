@@ -242,12 +242,12 @@ def _format_today_snapshot(today_snapshot: dict | None) -> str:
     return f"\n\nDetaillierte Blöcke für HEUTE ({day_label}), nutze das für Fragen zum heutigen Tag:\n" + "\n".join(lines)
 
 
-def _post_report_system_prompt(calendar_end_date: str | None, today_str: str) -> str:
+def _post_report_system_prompt(calendar_end_date: str | None, now_str: str) -> str:
     coverage_note = (
         f"Der Monats-Kalender seines Berichts deckt Ereignisse bis einschließlich "
-        f"{calendar_end_date} ab. Heutiges Datum: {today_str}."
+        f"{calendar_end_date} ab. Jetziger Zeitpunkt: {now_str}."
         if calendar_end_date
-        else f"Heutiges Datum: {today_str}. (Kein gespeichertes Enddatum für den "
+        else f"Jetziger Zeitpunkt: {now_str}. (Kein gespeichertes Enddatum für den "
         "Kalender vorhanden.)"
     )
     return f"""Du bist die dritte von drei Rollen in diesem Service: nach dem \
@@ -268,10 +268,12 @@ ohne Übertreibungen oder erfundene Erfolgsversprechen. Keine Tatsachenbehauptun
 zu Gesundheit, Geld oder Recht — das bleibt Unterhaltung und Selbstreflexion.
 - Halte Antworten kurz und im Gesprächston (wenige Sätze), nicht wie ein neuer \
 Fließtext-Bericht.
-- Du kennst das heutige Datum (siehe unten) und ggf. die konkreten Blöcke des \
-heutigen Tages. Wenn der Kunde nach "heute"/"jetzt"/einem bestimmten Datum fragt, \
-nutze diese konkreten Daten statt nur die allgemeine Monats-Zusammenfassung aus \
-dem Bericht zu wiederholen — das macht die Antwort spürbar persönlicher.
+- Du kennst den aktuellen Zeitpunkt — Datum UND Uhrzeit, in deutscher Zeitzone \
+(Berlin) — sowie ggf. die konkreten 2-Stunden-Blöcke des heutigen Tages (siehe \
+unten). Wenn der Kunde nach "heute"/"jetzt"/"gerade eben"/einem bestimmten Datum \
+fragt, nutze diese konkreten Daten UND die aktuelle Uhrzeit, um den passenden \
+Block zu identifizieren, statt nur die allgemeine Monats-Zusammenfassung aus dem \
+Bericht zu wiederholen — das macht die Antwort spürbar persönlicher und aktueller.
 
 Kundenbindung: {coverage_note} Der Kalender/Bericht gilt NUR für diesen einen \
 Monat. Wenn der Kunde nach einem Datum FRAGT, das außerhalb dieses Zeitraums \
@@ -295,7 +297,7 @@ def generate_post_report_reply(
     history: list,
     user_message: str,
     calendar_end_date: str | None = None,
-    today_str: str = "",
+    now_str: str = "",
     today_snapshot: dict | None = None,
 ) -> tuple[str, bool]:
     """
@@ -305,6 +307,10 @@ def generate_post_report_reply(
     NICHT neu aus den Rohdaten generiert, damit Antworten konsistent zum
     tatsächlich gelesenen Bericht bleiben. history — wie bei
     generate_sales_reply persistiert in conversation_state (post_report_chat_history).
+    now_str — Datum UND Uhrzeit der eingehenden Nachricht, feste Referenz-Zeitzone
+    Europe/Berlin (siehe dialog_manager._now_in_berlin), NICHT die Server-Zeitzone
+    (die z.B. auf einem VPS oft UTC ist) und NICHT die Geburtsort-Zeitzone des
+    Kunden — bewusste Vereinfachung, siehe ARCHITECTURE.md.
 
     Rückgabe: (antwort_text, will_verlaengern) — will_verlaengern ist True, wenn
     Claude das start_renewal-Tool aufgerufen hat (Kunde hat einer neuen
@@ -312,7 +318,7 @@ def generate_post_report_reply(
     """
     messages = list(history) + [{"role": "user", "content": user_message}]
     system = _with_extra_instructions(
-        f"{_post_report_system_prompt(calendar_end_date, today_str)}\n\n"
+        f"{_post_report_system_prompt(calendar_end_date, now_str)}\n\n"
         f"{_language_directive(birth_data)}\n\n"
         f"Stil-Anweisung: {get_style_instruction(birth_data.get('style'))}\n\n"
         f"Der Bericht des Kunden (bereits erhalten):\n{report_context}"

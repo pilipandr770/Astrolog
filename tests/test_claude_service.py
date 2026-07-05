@@ -110,7 +110,7 @@ def test_generate_post_report_reply_includes_report_context_and_history():
             history,
             "Was heisst das fuer meine Finanzen?",
             calendar_end_date="2026-08-02",
-            today_str="2026-07-10",
+            now_str="10.07.2026 09:15 Uhr (Europe/Berlin)",
         )
 
     assert text == "Klar, das heisst..."
@@ -118,7 +118,7 @@ def test_generate_post_report_reply_includes_report_context_and_history():
     system_prompt = mock_create.call_args.kwargs["system"]
     assert "Dein Mond steht im 4. Haus" in system_prompt
     assert "2026-08-02" in system_prompt
-    assert "2026-07-10" in system_prompt
+    assert "10.07.2026 09:15 Uhr" in system_prompt
     assert mock_create.call_args.kwargs["tools"] == [claude_service.START_RENEWAL_TOOL]
     sent_messages = mock_create.call_args.kwargs["messages"]
     assert sent_messages[0] == history[0]

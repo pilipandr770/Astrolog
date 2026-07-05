@@ -27,7 +27,8 @@ app/services/payment_poller.py), а не через вебхук — серве�
 """
 import json
 import logging
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from app.config import Config
 from app.models import conversation_state
@@ -59,6 +60,16 @@ MAX_SALES_HISTORY_TURNS = 8
 # Dasselbe für die Nachbetreuung nach Berichtsversand (siehe
 # _handle_post_report_chat).
 MAX_POST_REPORT_HISTORY_TURNS = 8
+
+# Feste Referenz-Zeitzone für "jetzt" im Coach-Chat (siehe _handle_post_report_chat)
+# — bewusst NICHT die Server-Zeitzone (VPS läuft oft in UTC) und NICHT die
+# Geburtsort-Zeitzone des Kunden, sondern Berlin als Standard-Bezugszeitzone
+# des Produkts (siehe auch die deutsche Standardsprache in claude_service.py).
+BERLIN_TZ = ZoneInfo("Europe/Berlin")
+
+
+def _now_in_berlin() -> datetime:
+    return datetime.now(BERLIN_TZ)
 
 
 def handle_message(phone: str, message: dict) -> None:
@@ -225,10 +236,13 @@ def _handle_post_report_chat(phone: str, text: str, state: dict) -> None:
         "verweise bei Bedarf darauf, dass der Kunde Ausschnitte aus seinem "
         "PDF zitieren kann.)"
     )
+    # Feste Referenz "jetzt" in Berliner Zeit (nicht Server-UTC) — sowohl für
+    # das Kalenderdatum des Snapshots als auch für Datum+Uhrzeit im Prompt.
+    now = _now_in_berlin()
     # Konkrete Blöcke für HEUTE (nicht nur die Monats-Zusammenfassung) — macht
     # Antworten auf "wie wird mein Tag heute?" spürbar persönlicher. Fehler
     # hier blockieren die Antwort NICHT (siehe compute_today_snapshot).
-    today_snapshot = report_generator.compute_today_snapshot(state)
+    today_snapshot = report_generator.compute_today_snapshot(state, target_date=now.date())
 
     try:
         reply_text, renew = claude_service.generate_post_report_reply(
@@ -237,7 +251,7 @@ def _handle_post_report_chat(phone: str, text: str, state: dict) -> None:
             history,
             text,
             calendar_end_date=state.get("report_calendar_end_date"),
-            today_str=date.today().isoformat(),
+            now_str=now.strftime("%d.%m.%Y %H:%M Uhr (Europe/Berlin)"),
             today_snapshot=today_snapshot,
         )
     except Exception:
