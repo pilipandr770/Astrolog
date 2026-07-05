@@ -1332,3 +1332,195 @@
     - condition: "Saturn rules House 2 (Dhan) or House 7 (Yuvati)"
       effect: "Fear of premature death."
   remedy: "Mrityunjaya Japa, charity of a black cow and a female buffalo."
+
+- id: dasha_ketu_ketu
+  mahadasha_lord: Ketu
+  antardasha_lord: Ketu
+  summary: >
+    Ketu's own sub-period within its own main period — even the favourable
+    reading carries a note of mental strain, and affliction is described
+    in fairly severe, health-focused terms.
+  severity: mixed
+  benefit_effects:
+    - condition: "Ketu in a Kendra, a Trikona, or related to the lord of House 9 (Dharma), House 10 (Karma), or House 4 (Bandhu)"
+      effect: "Happiness through spouse and children, recognition from authority — though accompanied by some mental agony — and gain of land or a village."
+  malefic_effects:
+    - condition: "Ketu in its debilitation sign, in House 8 or House 12, along with a combust planet"
+      effect: "Heart-related disease, defamation, destruction of wealth and cattle, distress to spouse and children, instability of mind."
+    - condition: "Ketu related to the lord of House 2 (Dhan) or House 7 (Yuvati), or placed in either house"
+      effect: "Danger from disease, great distress, separation from relatives."
+  remedy: "Durga Saptashati Japa and Mrityunjaya Japa."
+
+- id: dasha_ketu_venus
+  mahadasha_lord: Ketu
+  antardasha_lord: Venus
+  summary: >
+    Favourable for status, health and property when Venus is dignified;
+    affliction brings a fairly broad list of minor-to-moderate physical and
+    domestic complaints.
+  severity: mixed
+  benefit_effects:
+    - condition: "Venus in its exaltation sign, own sign, or associated with the lord of House 10 (Karma) in a Kendra/Trikona (additionally favourable if also associated with the lord of House 9)"
+      effect: "Royal favour, good fortune, gain of clothes, recovery of lost status, comfort of vehicles, visits to sacred shrines, gain of land and villages through royal favour — with a dawn of fortune if Dharma's lord is also involved."
+    - condition: "Venus in a Kendra, a Trikona, House 3, or House 11 from the Antardasha lord"
+      effect: "Sound health, family wellbeing, gains of fine food and vehicles."
+  malefic_effects:
+    - condition: "Venus in House 6, 8, or 12 from the Antardasha lord"
+      effect: "Unprovoked quarrels, loss of wealth, distress to cattle."
+    - condition: "Venus in its debilitation sign, associated with a debilitated planet, or in House 6 or House 8"
+      effect: "Quarrels with relatives, headaches, eye trouble, heart-related disease, defamation, loss of wealth, distress to cattle and spouse."
+    - condition: "Venus rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Physical distress and mental agony."
+  remedy: "Recitation of Durga texts, charity of a tawny-coloured cow or a female buffalo."
+
+- id: dasha_ketu_sun
+  mahadasha_lord: Ketu
+  antardasha_lord: Sun
+  summary: >
+    Favourable for wealth and status when the Sun is dignified; affliction
+    is described as front-loaded (worse at the start, easing by the end).
+  severity: mixed
+  benefit_effects:
+    - condition: "Sun in its exaltation sign, own sign, or aspected by/associated with a benefic in a Kendra, a Trikona, or House 11 (Labha)"
+      effect: "Gain of wealth, royal favour, performance of virtuous deeds, fulfillment of ambitions."
+    - condition: "Sun in a Kendra, a Trikona, House 2, or House 11 from the Antardasha lord"
+      effect: "Physical fitness, gain of wealth or birth of a son, success in virtuous undertakings, a position of local leadership."
+  malefic_effects:
+    - condition: "Sun associated with malefic(s) in House 8 or House 12"
+      effect: "Danger from authority, separation from parents, forced foreign travel, distress from thieves/snakes/poison, government punishment, antagonism with friends, sorrow, danger from fever."
+    - condition: "Sun associated with malefics in House 8 or House 12 from the Antardasha lord (worse at the start of the Antardasha, easing toward its end)"
+      effect: "Obstacles in obtaining food, fears, loss of wealth and cattle."
+    - condition: "Sun rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Fear of premature death."
+  remedy: "Charity of a cow and gold."
+
+- id: dasha_ketu_moon
+  mahadasha_lord: Ketu
+  antardasha_lord: Moon
+  summary: >
+    Favourable for status and property when the Moon is dignified and
+    waxing; the source describes a notable three-phase arc even under
+    generally good placement (auspicious start, cordial middle, difficulty
+    at the end).
+  severity: mixed
+  benefit_effects:
+    - condition: "Moon in its exaltation sign, own sign, a Kendra, a Trikona, House 11 (Labha), or House 2 (Dhan)"
+      effect: "Recognition from authority, enthusiasm, general wellbeing, acquisition of a house and land, unusually large gains of food/clothes/vehicles/cattle, business success, construction of reservoirs, spousal/children happiness — fully realized if the Moon is waxing."
+    - condition: "Moon in a Kendra, a Trikona, or House 11 from the Antardasha lord, with strength"
+      effect: "Acquisition of cows and land, meeting relatives and succeeding through them, increase in dairy produce — auspicious at the start of the Antardasha, cordial relations with authority in the middle, but danger from authority and forced travel toward the end."
+  malefic_effects:
+    - condition: "Moon in its debilitation sign, or in House 6, 8, or 12"
+      effect: "Unhappiness, mental agony, obstacles in undertakings, separation from parents, business losses, destruction of cattle."
+    - condition: "Moon in House 6, 8, or 12 from the Antardasha lord"
+      effect: "Loss of wealth, anxiety, enmity with relatives, distress to a brother."
+    - condition: "Moon rules House 2 (Dhan), House 7 (Yuvati), or House 8 (Randhr)"
+      effect: "Fear of premature death."
+  remedy: "Recitation of Moon mantras, charity of items associated with the Moon."
+
+- id: dasha_ketu_mars
+  mahadasha_lord: Ketu
+  antardasha_lord: Mars
+  summary: >
+    Favourable for land, status and enterprise when Mars is dignified; the
+    source notes even the afflicted reading carries some auspicious mixed
+    in, rather than being uniformly negative.
+  severity: mixed
+  benefit_effects:
+    - condition: "Mars in its exaltation sign, own sign, or aspected by/associated with benefics"
+      effect: "Acquisition of land or a village, growth in wealth and cattle, laying out a new garden, gain of wealth through royal favour."
+    - condition: "Mars related to the lord of House 9 (Dharma) or House 10 (Karma)"
+      effect: "A near-certain gain of land and general enjoyment."
+    - condition: "Mars in a Kendra, a Trikona, House 3, or House 11 from the Antardasha lord"
+      effect: "Recognition from authority, considerable popularity and reputation, happiness through children and friends."
+  malefic_effects:
+    - condition: "Mars in House 8, 12, or 2 from the Antardasha lord"
+      effect: "Fear of death or misfortune during foreign travel, diabetes-like ailment, needless troubles, danger from thieves and authority, quarrels — though some auspicious effects are still possible even here."
+    - condition: "Mars rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "High fever, danger from poison, distress to one's spouse, mental agony, fear of premature death."
+  remedy: "Charity of a bull, said to bring enjoyment and property gain through Mars's grace."
+
+- id: dasha_ketu_rahu
+  mahadasha_lord: Ketu
+  antardasha_lord: Rahu
+  summary: >
+    Favourable for wealth when Rahu is dignified, with an explicit
+    time-phased note (rough start, improving later); affliction brings a
+    cluster of feverish/urinary ailments.
+  severity: mixed
+  benefit_effects:
+    - condition: "Rahu in its exaltation sign, own sign, a friendly sign, a Kendra, a Trikona, House 11 (Labha), House 3 (Sahaja), or House 2 (Dhan)"
+      effect: "Increase in wealth, gain of wealth/grain/cattle/land, potentially through a foreign dignitary — some trouble is possible at the very start of the Antardasha, improving afterward."
+  malefic_effects:
+    - condition: "Rahu associated with a malefic in House 8 or House 12"
+      effect: "Frequent urination, bodily weakness, cold-type fever, danger from thieves, intermittent fever, disgrace, quarrels, diabetes-like ailment, stomach pain."
+    - condition: "Rahu placed in House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Distress and danger."
+  remedy: "Recitation of the Durga Saptashati."
+
+- id: dasha_ketu_jupiter
+  mahadasha_lord: Ketu
+  antardasha_lord: Jupiter
+  summary: >
+    Favourable for wealth, family celebration and success when Jupiter is
+    dignified; affliction is described as front-loaded (some good at the
+    start, only adverse effects later).
+  severity: mixed
+  benefit_effects:
+    - condition: "Jupiter in its exaltation sign, own sign, or associated with the lord of Lagna, House 9 (Dharma), or House 10 (Karma) in a Kendra/Trikona"
+      effect: "Increase in wealth and grain, royal favour, enthusiasm, gain of vehicles, celebration such as a son's birth, performance of virtuous deeds and Yagyas, overcoming rivals, general enjoyment."
+    - condition: "Jupiter associated with a benefic in a Kendra, a Trikona, House 3, or House 11 from the Antardasha lord"
+      effect: "Gains of various garments and ornaments through royal favour, foreign travel, care for relatives, availability of decent food."
+  malefic_effects:
+    - condition: "Jupiter in its debilitation sign, or in House 6, 8, or 12 (some good effects still possible at the very start of the Antardasha, but only adverse effects afterward)"
+      effect: "Danger from thieves/snakes/wounds, destruction of wealth, separation from spouse and children, physical distress."
+    - condition: "Jupiter rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Fear of premature death."
+  remedy: "Mrityunjaya Japa, recitation of the Shiva Sahasranama."
+
+- id: dasha_ketu_saturn
+  mahadasha_lord: Ketu
+  antardasha_lord: Saturn
+  summary: >
+    Difficult by default when Saturn lacks strength/dignity, turning
+    favourable mainly through specific signs (Libra/Pisces) or benefic
+    support — the source also references a related Raj Yoga configuration
+    from the Brihat Jataka.
+  severity: mixed
+  benefit_effects:
+    - condition: "Saturn in a Trikona in Pisces or Libra, in its own sign, in an auspicious Navamsa, or associated with a benefic in a Kendra/Trikona/House 3"
+      effect: "Success in undertakings, happiness through one's employer, comfortable travel, growth in happiness and property within one's home village, audience with authority. (The source notes that per the Brihat Jataka, Saturn in Libra, Pisces, Sagittarius, Capricorn, or Aquarius in Lagna produces a Raj Yoga.)"
+  malefic_effects:
+    - condition: "Saturn lacking strength and dignity"
+      effect: "Distress to oneself and relatives, agony, loss of wealth through government fines, forced resignation from one's position, foreign travel, danger from thieves while travelling (some increase in cattle wealth is noted even amid these difficulties)."
+    - condition: "Saturn in House 8 or House 12"
+      effect: "Loss of wealth and lethargy."
+    - condition: "Saturn associated with a malefic in House 6, 8, or 12 from the Antardasha lord"
+      effect: "Physical distress, agony, obstacles in undertakings, lethargy, defamation, death of parents."
+    - condition: "Saturn rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Fear of premature death."
+  remedy: "Havan with sesame seeds, charity of a black cow or a female buffalo."
+
+- id: dasha_ketu_mercury
+  mahadasha_lord: Ketu
+  antardasha_lord: Mercury
+  summary: >
+    Favourable for status, family and wealth when Mercury is dignified;
+    the source describes a distinct three-phase arc for the more
+    difficult placements (good start, better middle, difficult end — or
+    the reverse, difficult start with a better middle).
+  severity: mixed
+  benefit_effects:
+    - condition: "Mercury in a Kendra, a Trikona, its exaltation sign, or own sign"
+      effect: "Acquisition of a position of authority, enjoyments, charitable giving, gain of wealth and land, birth of a son, sudden religious celebrations or events like marriage, family wellbeing, gain of clothes and ornaments."
+    - condition: "Mercury associated with the lord of House 9 (Dharma) or House 10 (Karma)"
+      effect: "Company of learned people, dawn of fortune, listening to religious discourse."
+    - condition: "Mercury in a Kendra, a Trikona, or House 11 from the Antardasha lord"
+      effect: "Good health, happiness through one's son, opulence and glory, availability of good food and clothes, unusually large business profits."
+  malefic_effects:
+    - condition: "Mercury associated with Saturn, Mars, or Rahu in House 6, 8, or 12 (some benefit at the start of the Antardasha, better in the middle, but inauspicious at the end)"
+      effect: "Conflict with government officials, having to live in others' houses, destruction of wealth/clothes/vehicles/cattle."
+    - condition: "Mercury weak and placed in House 6, 8, or 12 from the Antardasha lord (distress at the start, easing with shrine visits in the middle)"
+      effect: "Distress and unhappiness to spouse and children, danger from authority."
+    - condition: "Mercury rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Fear of premature death."
+  remedy: "Recitation of the Vishnu Sahasranama."
