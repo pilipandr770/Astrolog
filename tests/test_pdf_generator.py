@@ -73,3 +73,32 @@ def test_generate_report_pdf_without_calendar(tmp_path):
         "## Nur Text\n\nOhne Kalender.",
     )
     assert os.path.getsize(output) > 500
+
+
+def _fake_segments():
+    return [
+        {"start_date": date(2026, 7, 5), "end_date": date(2026, 7, 20), "mahadasha_lord": "Sun", "antardasha_lord": "Moon"},
+        {"start_date": date(2026, 7, 20), "end_date": date(2026, 8, 4), "mahadasha_lord": "Sun", "antardasha_lord": "Mars"},
+    ]
+
+
+def test_generate_jyotish_report_pdf_renders_markdown_and_segments(tmp_path):
+    output = str(tmp_path / "jyotish_report.pdf")
+    result = pdf_generator.generate_jyotish_report_pdf(
+        output,
+        {"date": "15.05.1990", "time": "14:30", "place": "Berlin, Deutschland"},
+        MARKDOWN_TEXT,
+        segments=_fake_segments(),
+    )
+    assert os.path.exists(result)
+    assert os.path.getsize(result) > 1000
+
+
+def test_generate_jyotish_report_pdf_without_segments(tmp_path):
+    output = str(tmp_path / "jyotish_report_no_seg.pdf")
+    pdf_generator.generate_jyotish_report_pdf(
+        output,
+        {"date": "15.05.1990", "time": "14:30", "place": "Berlin"},
+        "## Nur Text\n\nOhne Zeitplan.",
+    )
+    assert os.path.getsize(output) > 500

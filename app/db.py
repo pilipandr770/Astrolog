@@ -22,6 +22,11 @@ CREATE TABLE IF NOT EXISTS conversations (
     language_sample TEXT,
     -- Gewünschter Ton der Auswertung, siehe claude_service.STYLE_PRESETS
     style TEXT,
+    -- Gewählte astrologische Methode ("lal_kitab" oder "jyotish") — wird
+    -- von Rolle 1 (Verkaufsberater, dialog_manager._handle_sales_chat)
+    -- über das start_intake-Tool erfasst und bestimmt den kompletten
+    -- weiteren Pfad (Teaser/Bericht/PDF/Coach) — siehe docs/TODO.md Punkt 10.
+    astro_method TEXT,
     -- JSON-Liste der bisherigen Verkaufsgespräch-Turns (siehe
     -- dialog_manager._handle_sales_chat) — nötig, damit Claude über
     -- mehrere Nachrichten hinweg Kontext behält, bevor die strukturierte
@@ -79,6 +84,7 @@ def init_db():
     _ensure_column(conn, "conversations", "language_hint", "TEXT")
     _ensure_column(conn, "conversations", "language_sample", "TEXT")
     _ensure_column(conn, "conversations", "style", "TEXT")
+    _ensure_column(conn, "conversations", "astro_method", "TEXT")
     _ensure_column(conn, "conversations", "sales_chat_history", "TEXT")
     _ensure_column(conn, "conversations", "last_interpretation", "TEXT")
     _ensure_column(conn, "conversations", "post_report_chat_history", "TEXT")

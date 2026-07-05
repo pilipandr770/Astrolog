@@ -10,6 +10,7 @@ TODO: промпт не финализирован, нужно протести�
 import anthropic
 from app.config import Config
 from app.models import settings
+from app.services import jyotish
 
 client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
 
@@ -69,6 +70,32 @@ def _language_directive(birth_data: dict) -> str:
     return "Schreibe auf Deutsch (Standardsprache — kein Sprachsignal vom Nutzer vorhanden)."
 
 
+# Zwei unabhängige astrologische Methoden, siehe docs/TODO.md Punkt 10 —
+# der Nutzer bekommt EINE davon (keine Vermischung der Deutungen). Der Key
+# hier ist auch der Wert, der in conversation_state.astro_method landet und
+# von dialog_manager/report_generator zum Verzweigen genutzt wird.
+ASTRO_METHODS = {
+    "lal_kitab": {
+        "label": "Lal Kitab",
+        "description": (
+            "Nordindische Volksastrologie-Tradition, bekannt für sehr konkrete, "
+            "alltagstaugliche Handlungsempfehlungen (Upay) je Planet/Haus-Position "
+            "und einen Monats-Transitkalender (2-Stunden-Blöcke, welches Haus "
+            "gerade aktiv ist)."
+        ),
+    },
+    "jyotish": {
+        "label": "Jyotish (Vimshottari Dasha)",
+        "description": (
+            "Klassische vedische Astrologie nach dem Brihat Parashara Hora "
+            "Shastra — arbeitet mit den großen und kleinen Planeten-Zeitperioden "
+            "(Maha-/Antardasha) des Lebens: welcher Planet gerade 'die Regie' "
+            "über eine Lebensphase führt und was das bedeutet, inklusive der "
+            "Perioden, die im kommenden Monat aktiv sind oder wechseln."
+        ),
+    },
+}
+
 START_INTAKE_TOOL = {
     "name": "start_intake",
     "description": (
@@ -76,55 +103,83 @@ START_INTAKE_TOOL = {
         "seine Geburtsdaten (Datum, Zeit, Ort) für die Berechnung zu nennen — "
         "z.B. er stimmt zu, fragt aktiv nach dem nächsten Schritt, oder nennt "
         "bereits ein Geburtsdatum. NICHT aufrufen, solange noch offene Fragen "
-        "im Raum stehen oder der Nutzer unentschlossen wirkt."
+        "im Raum stehen, der Nutzer unentschlossen wirkt, oder er sich noch "
+        "nicht für eine der beiden Methoden (siehe method-Parameter) "
+        "entschieden hat — die Methodenwahl muss VOR diesem Aufruf geklärt sein."
     ),
-    "input_schema": {"type": "object", "properties": {}},
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "method": {
+                "type": "string",
+                "enum": list(ASTRO_METHODS.keys()),
+                "description": "Die vom Nutzer gewählte astrologische Methode.",
+            },
+        },
+        "required": ["method"],
+    },
 }
 
 
 def _sales_system_prompt() -> str:
+    methods_text = "\n".join(
+        f"- {info['label']} ({key}): {info['description']}"
+        for key, info in ASTRO_METHODS.items()
+    )
     return f"""Du bist ein erfahrener, ehrlicher Verkaufsberater für einen WhatsApp-\
-Astrologie-Service nach dem indischen Lal-Kitab-System. Du sprichst gerade mit \
-einem Interessenten, der noch KEINE Geburtsdaten genannt hat — triff noch KEINE \
-astrologischen Aussagen über ihn persönlich.
+Astrologie-Service. Du sprichst gerade mit einem Interessenten, der noch KEINE \
+Geburtsdaten genannt hat — triff noch KEINE astrologischen Aussagen über ihn \
+persönlich.
+
+Es gibt ZWEI unabhängige astrologische Methoden zur Auswahl — der Kunde bekommt \
+GENAU EINE davon (die Deutungen werden nicht vermischt, da beide Systeme sich in \
+Details widersprechen können):
+{methods_text}
 
 Erkläre bei Bedarf ehrlich und konkret, wie der Service funktioniert:
 - Die Planetenpositionen im Moment der Geburt werden mit einem professionellen \
 astronomischen Berechnungsprogramm (Swiss Ephemeris) exakt berechnet — das ist \
-überprüfbare Astronomie/Mathematik, keine Vermutung.
-- Die BEDEUTUNG dieser Positionen wird aus einer etablierten, weit verbreiteten \
-Quelle der Lal-Kitab-Tradition abgeleitet (einem anerkannten historischen Werk \
-dieser astrologischen Schule) — keine frei erfundenen Deutungen.
-- Ablauf: Geburtsdatum, -zeit und -ort → kostenlose kurze Kostprobe (1-2 \
-Erkenntnisse aus der Karte) → bei Interesse ein ausführlicher, persönlicher \
-PDF-Bericht ({Config.REPORT_PRICE_EUR} €) mit vollständiger Charakteranalyse \
-UND einem Stundenkalender für den kommenden Monat (alle 2 Stunden, welcher \
-Lebensbereich gerade betont ist).
+überprüfbare Astronomie/Mathematik, keine Vermutung. Das gilt für BEIDE Methoden \
+gleichermaßen.
+- Die BEDEUTUNG dieser Positionen wird — je nach gewählter Methode — aus einer \
+etablierten, weit verbreiteten Quelle der jeweiligen Tradition abgeleitet (einem \
+anerkannten historischen Werk dieser astrologischen Schule) — keine frei \
+erfundenen Deutungen.
+- Ablauf: zuerst die Methode klären (siehe oben), dann Geburtsdatum, -zeit und \
+-ort → kostenlose kurze Kostprobe (1-2 Erkenntnisse aus der Karte, in der \
+gewählten Methode) → bei Interesse ein ausführlicher, persönlicher PDF-Bericht \
+({Config.REPORT_PRICE_EUR} €) mit vollständiger Charakteranalyse UND einem \
+Kalender/Ausblick für den kommenden Monat (Details je nach Methode, siehe oben).
 - Der Bericht kann in unterschiedlichem Ton geschrieben werden (warmherzig, \
 humorvoll, sachlich, romantisch) — z.B. auch als Geschenk für jemand anderen \
 gedacht (Partner, Familie, Freund).
+
+Wenn der Nutzer noch unsicher ist, welche Methode er möchte, hilf ihm mit dem \
+Unterschied (siehe oben) — dränge aber nicht auf eine bestimmte Wahl.
 
 Beantworte Fragen ehrlich, ohne Übertreibungen oder falsche Versprechen — keine \
 Aussagen zu Gesundheit/Geld/Recht als Tatsache, das Ganze dient Unterhaltung und \
 Selbstreflexion. Sei sympathisch, natürlich und knapp (2-4 Sätze pro Antwort) — \
 wie ein guter Berater im Gespräch, kein Marketing-Text und kein Frage-Katalog.
 
-Sobald der Nutzer bereit wirkt anzufangen, rufe das Tool 'start_intake' auf UND \
-schreibe zusätzlich eine kurze, einladende Textantwort. Dräng nicht darauf, wenn \
-noch Fragen offen sind."""
+Sobald die Methode geklärt ist UND der Nutzer bereit wirkt anzufangen, rufe das \
+Tool 'start_intake' mit der gewählten Methode auf UND schreibe zusätzlich eine \
+kurze, einladende Textantwort. Dräng nicht darauf, wenn noch Fragen offen sind \
+oder die Methode noch nicht klar ist."""
 
 
-def generate_sales_reply(birth_data: dict, history: list, user_message: str) -> tuple[str, bool]:
+def generate_sales_reply(birth_data: dict, history: list, user_message: str) -> tuple[str, bool, str | None]:
     """
     Freies Verkaufsgespräch VOR der Datenerfassung (siehe dialog_manager.
     _handle_sales_chat). history — Liste von {"role": "user"/"assistant",
     "content": str} früherer Turns dieses Gesprächs (persistiert in
     conversation_state.sales_chat_history als JSON).
 
-    Rückgabe: (antwort_text, bereit_fuer_intake) — bereit_fuer_intake ist True,
-    wenn Claude das start_intake-Tool aufgerufen hat (siehe START_INTAKE_TOOL).
-    Ein Tool-Aufruf statt eines Text-Markers ist robuster gegen Prompt-Drift/
-    versehentliches Durchsickern eines Markers in die Nutzer-Antwort.
+    Rückgabe: (antwort_text, bereit_fuer_intake, methode) — bereit_fuer_intake
+    ist True, wenn Claude das start_intake-Tool aufgerufen hat (siehe
+    START_INTAKE_TOOL); methode ist dann "lal_kitab" oder "jyotish" (sonst
+    None). Ein Tool-Aufruf statt eines Text-Markers ist robuster gegen
+    Prompt-Drift/versehentliches Durchsickern eines Markers in die Antwort.
     """
     messages = list(history) + [{"role": "user", "content": user_message}]
     system = _with_extra_instructions(f"{_sales_system_prompt()}\n\n{_language_directive(birth_data)}")
@@ -137,8 +192,11 @@ def generate_sales_reply(birth_data: dict, history: list, user_message: str) -> 
         messages=messages,
     )
     text = "".join(block.text for block in response.content if block.type == "text").strip()
-    ready = any(block.type == "tool_use" and block.name == "start_intake" for block in response.content)
-    return text, ready
+    method = next(
+        (block.input.get("method") for block in response.content if block.type == "tool_use" and block.name == "start_intake"),
+        None,
+    )
+    return text, method is not None, method
 
 
 TEASER_SYSTEM_PROMPT = """Du bist ein erfahrener Lal-Kitab-Astrologe. Du bekommst 1-2 \
@@ -242,6 +300,29 @@ def _format_today_snapshot(today_snapshot: dict | None) -> str:
     return f"\n\nDetaillierte Blöcke für HEUTE ({day_label}), nutze das für Fragen zum heutigen Tag:\n" + "\n".join(lines)
 
 
+def _format_today_dasha(today_dasha: dict | None) -> str:
+    """
+    Jyotish-Pendant zu _format_today_snapshot() — today_dasha ist
+    {"mahadasha", "antardasha", "effect"} (siehe
+    report_generator.compute_jyotish_today_snapshot), damit der Coach
+    Fragen wie "wie steht es gerade für mich?" mit der TATSÄCHLICH heute
+    aktiven Dasha-Kombination beantworten kann statt nur mit der im
+    Bericht genannten (die sich seit Berichtsversand geändert haben kann).
+    """
+    if not today_dasha or not today_dasha.get("mahadasha"):
+        return ""
+
+    effect = today_dasha.get("effect")
+    effect_text = _format_dasha_effect(effect) if effect else "(keine Deutung für diese Kombination gefunden)"
+    return (
+        "\n\nAKTUELL (heute) laufende Dasha-Periode, nutze das für Fragen zu "
+        "'gerade jetzt'/'heute':\n"
+        f"{_format_dasha_period(today_dasha['mahadasha'], 'Mahadasha')}\n"
+        f"{_format_dasha_period(today_dasha['antardasha'], 'Antardasha')}\n"
+        f"{effect_text}"
+    )
+
+
 def _post_report_system_prompt(calendar_end_date: str | None, now_str: str) -> str:
     coverage_note = (
         f"Der Monats-Kalender seines Berichts deckt Ereignisse bis einschließlich "
@@ -299,6 +380,7 @@ def generate_post_report_reply(
     calendar_end_date: str | None = None,
     now_str: str = "",
     today_snapshot: dict | None = None,
+    today_dasha: dict | None = None,
 ) -> tuple[str, bool]:
     """
     Nachbetreuungs-Chat (dritte Rolle, siehe _post_report_system_prompt) —
@@ -323,6 +405,7 @@ def generate_post_report_reply(
         f"Stil-Anweisung: {get_style_instruction(birth_data.get('style'))}\n\n"
         f"Der Bericht des Kunden (bereits erhalten):\n{report_context}"
         f"{_format_today_snapshot(today_snapshot)}"
+        f"{_format_today_dasha(today_dasha)}"
     )
 
     response = client.messages.create(
@@ -521,6 +604,204 @@ Schreibe den Teaser."""
         model=Config.ANTHROPIC_MODEL,
         max_tokens=400,
         system=_with_extra_instructions(TEASER_SYSTEM_PROMPT),
+        messages=[{"role": "user", "content": user_message}],
+    )
+    return "".join(block.text for block in response.content if block.type == "text")
+
+
+# ---------------------------------------------------------------------------
+# Rolle 2b: Jyotish/Vimshottari-Dasha-Interpretation — eigenständiger Pfad,
+# NICHT mit den Lal-Kitab-Funktionen oben vermischt (siehe docs/TODO.md
+# Punkt 10 und ASTRO_METHODS oben). Nutzt app/services/dasha.py für die
+# Zeitperioden-Berechnung und app/services/jyotish.py für die dazugehörigen,
+# aus BPHS abgeleiteten Deutungen.
+# ---------------------------------------------------------------------------
+
+JYOTISH_TEASER_SYSTEM_PROMPT = """Du bist ein erfahrener Astrologe der klassischen \
+vedischen Tradition (Jyotish/Vimshottari Dasha). Du bekommst die AKTUELLE \
+Planeten-Zeitperiode (Maha- und Antardasha) eines Interessenten, der noch NICHT \
+bezahlt hat, samt einer dazugehörigen, aus einem klassischen Quelltext (Brihat \
+Parashara Hora Shastra) abgeleiteten Deutung — erfinde KEINE weiteren \
+astrologischen Fakten.
+
+Schreibe einen KURZEN, warmen Teaser (ca. 80-120 Wörter). Sprache und Ton sind in \
+der Nutzernachricht als eigene Anweisungen angegeben — befolge diese genau.
+- Greife die gegebene Dasha-Kombination konkret auf (keine allgemeinen Floskeln) \
+— z.B. welcher Planet gerade "die Regie" über diese Lebensphase führt und was \
+das andeutet.
+- Wecke Neugier, ohne die volle Tiefe preiszugeben.
+- Leite am Ende zu einem Angebot über: der volle Bericht (vollständige Deutung \
+samt Dasha-Zeitplan für den kommenden Monat) folgt als PDF, sobald die Zahlung \
+abgeschlossen ist — der Zahlungslink kommt in der nächsten Nachricht separat, \
+erwähne ihn nur kurz, ohne ihn selbst zu enthalten.
+- Kein Fachjargon-Overkill, keine medizinischen/rechtlichen/finanziellen Aussagen."""
+
+
+JYOTISH_SYSTEM_PROMPT = """Du bist ein erfahrener Astrologe der klassischen \
+vedischen Tradition (Jyotish), der einem Kunden seine persönliche \
+Vimshottari-Dasha-Auswertung erklärt. Du erhältst bereits berechnete Daten: die \
+aktuelle Maha-/Antardasha (welcher Planet gerade die "große" bzw. "kleine" \
+Zeitperiode des Lebens regiert), die Planetenpositionen/Häuser der Geburtskarte \
+und eine dazugehörige, aus einem klassischen Quelltext (Brihat Parashara Hora \
+Shastra) abgeleitete Deutung — erfinde KEINE zusätzlichen astrologischen \
+Fakten, interpretiere nur, was dir gegeben wird.
+
+Sprache und Ton der Auswertung sind in der Nutzernachricht als eigene \
+Anweisungen angegeben (Sprachrichtlinie und Stil-Anweisung) — befolge beide \
+genau, unabhängig davon, in welcher Sprache diese Systemanweisung selbst \
+geschrieben ist.
+
+Zur aktuellen Dasha-Kombination bekommst du eine Liste möglicher positiver und \
+belastender Effekte, jeweils mit der Originalbedingung aus dem Quelltext (z.B. \
+"Jupiter exalted or in a Kendra"). Diese Bedingungen beziehen sich teilweise auf \
+Planetenwürde (Exaltation etc.), die hier NICHT im Detail berechnet vorliegt — \
+nutze nur die mitgelieferten Planetenpositionen/Häuser, wo das möglich ist \
+(z.B. Haus-basierte Bedingungen), und formuliere die übrigen, nicht prüfbaren \
+Effekte vorsichtig im Konjunktiv (z.B. "das könnte bedeuten...", "traditionell \
+würde das für dich heißen..."), statt sie als sicher zutreffend darzustellen — \
+sei transparent, dass die exakte Passung von Details abhängt, die eine \
+vollständige Jyotish-Chart-Analyse bräuchte.
+
+Zur Kundenbindung: der Dasha-Zeitplan im Bericht deckt nur den kommenden Monat \
+ab. Falls im Bericht ein Wechsel der Antardasha innerhalb dieses Zeitraums \
+vorkommt, erkläre kurz, was sich dadurch inhaltlich verändert.
+
+Schreibe klar, ohne Fachjargon-Überladung. Füge am Ende einen kurzen Hinweis \
+hinzu, dass die Auswertung der Unterhaltung und Selbstreflexion dient und keine \
+medizinische, rechtliche oder finanzielle Beratung ersetzt (in derselben \
+Sprache wie der Rest der Auswertung)."""
+
+
+def _format_dasha_effect(effect) -> str:
+    lines = [f"### {effect.mahadasha_lord} Mahadasha / {effect.antardasha_lord} Antardasha", effect.summary]
+    if effect.benefit_effects:
+        lines.append("Mögliche positive Effekte (nur wenn die genannte Bedingung auf diese Karte zutrifft):")
+        lines += [f"  - Wenn {e['condition']}: {e['effect']}" for e in effect.benefit_effects]
+    if effect.malefic_effects:
+        lines.append("Mögliche belastende Effekte (nur wenn die genannte Bedingung auf diese Karte zutrifft):")
+        lines += [f"  - Wenn {e['condition']}: {e['effect']}" for e in effect.malefic_effects]
+    if effect.remedy:
+        lines.append(f"Empfehlung (Upay): {effect.remedy}")
+    return "\n".join(lines)
+
+
+def _format_dasha_period(period: dict, label: str) -> str:
+    return f"{label}: {period['lord']} ({period['start_date'].strftime('%d.%m.%Y')} – {period['end_date'].strftime('%d.%m.%Y')})"
+
+
+def _dasha_month_section(month_segments: list | None) -> str:
+    """
+    Anhang für die User-Message, wenn der Bericht den 30-Tage-Dasha-Zeitplan
+    enthält (siehe report_generator/dasha.compute_month_segments) — Pendant zu
+    claude_service._calendar_section() für Lal Kitab.
+    """
+    if not month_segments:
+        return ""
+
+    lines = []
+    for seg in month_segments:
+        effect = jyotish.get_dasha_effect(seg["mahadasha_lord"], seg["antardasha_lord"])
+        summary = effect.summary if effect else "(keine Deutung für diese Kombination gefunden)"
+        lines.append(
+            f"- {seg['start_date'].strftime('%d.%m.%Y')} bis {seg['end_date'].strftime('%d.%m.%Y')}: "
+            f"{seg['mahadasha_lord']} Mahadasha / {seg['antardasha_lord']} Antardasha — {summary}"
+        )
+    segments_text = "\n".join(lines)
+
+    return f"""
+
+Dasha-Zeitplan für die nächsten 30 Tage:
+{segments_text}
+
+Direkt nach deinem Text folgt im PDF eine Tabelle mit diesem Zeitplan. Schreibe \
+deshalb als LETZTEN Abschnitt deiner Auswertung (mit eigener Überschrift in der \
+Zielsprache) eine kurze, konkrete Zusammenfassung dieser Perioden mit Datum — \
+erkläre bei einem Wechsel der Antardasha innerhalb des Monats, was sich dadurch \
+verändert. Nutze NUR die oben gelisteten Perioden, erfinde keine zusätzlichen."""
+
+
+def generate_jyotish_teaser(birth_data: dict, mahadasha: dict, antardasha: dict, effect) -> str:
+    """
+    Kurzer kostenloser Teaser vor dem Zahlungslink (Jyotish-Pfad) — Pendant
+    zu generate_teaser() für Lal Kitab.
+    """
+    effect_text = _format_dasha_effect(effect) if effect else "Keine Deutung für diese Kombination gefunden."
+
+    user_message = f"""Sprachrichtlinie: {_language_directive(birth_data)}
+
+Stil-Anweisung: {get_style_instruction(birth_data.get("style"))}
+
+Geburtsdaten: {birth_data}
+
+Aktuelle Zeitperioden:
+{_format_dasha_period(mahadasha, "Mahadasha")}
+{_format_dasha_period(antardasha, "Antardasha")}
+
+Deutung für den Teaser:
+{effect_text}
+
+Schreibe den Teaser."""
+
+    response = client.messages.create(
+        model=Config.ANTHROPIC_MODEL,
+        max_tokens=400,
+        system=_with_extra_instructions(JYOTISH_TEASER_SYSTEM_PROMPT),
+        messages=[{"role": "user", "content": user_message}],
+    )
+    return "".join(block.text for block in response.content if block.type == "text")
+
+
+def generate_jyotish_interpretation(
+    birth_data: dict,
+    houses: dict,
+    mahadasha: dict,
+    antardasha: dict,
+    effect,
+    month_segments: list | None = None,
+) -> str:
+    """
+    Voller bezahlter Bericht (Jyotish-Pfad) — Pendant zu
+    generate_interpretation() für Lal Kitab.
+    """
+    positions_text = "\n".join(
+        f"- {name}: {data['sign']} (Haus {data.get('house', '?')})"
+        for name, data in houses.items()
+    )
+    effect_text = _format_dasha_effect(effect) if effect else (
+        "Keine Deutung für diese Maha-/Antardasha-Kombination gefunden."
+    )
+
+    user_message = f"""Sprachrichtlinie: {_language_directive(birth_data)}
+
+Stil-Anweisung: {get_style_instruction(birth_data.get("style"))}
+
+Geburtsdaten: {birth_data}
+
+Planetenpositionen (Häuser nach dem Ganzzeichen-System):
+{positions_text}
+
+Aktuelle Zeitperioden:
+{_format_dasha_period(mahadasha, "Mahadasha")}
+{_format_dasha_period(antardasha, "Antardasha")}
+
+Deutung für diese Maha-/Antardasha-Kombination:
+{effect_text}
+
+Erstelle daraus eine persönliche, gut lesbare Auswertung von ca. 400-600 Wörtern, \
+gegliedert in kurze Abschnitte mit Überschriften. Formatiere die gesamte \
+Auswertung als Markdown. Der Text erscheint 1:1 in einem bezahlten PDF-Bericht — \
+schreibe ALLES (auch Überschriften und Tabellen) konsequent in der Zielsprache, \
+ohne englische oder deutsche Einsprengsel. Verwende KEINE Emojis und keine \
+astrologischen Sonderzeichen (☿, ♃ usw.) — die PDF-Schrift kann sie nicht \
+darstellen. Beginne nach der Hauptüberschrift mit \
+einer kompakten Markdown-Tabelle der Planetenpositionen (Spalten: Planet, \
+Zeichen, Haus) — übersetze dabei auch die Planeten- und Sternzeichennamen in die \
+Zielsprache.{_dasha_month_section(month_segments)}"""
+
+    response = client.messages.create(
+        model=Config.ANTHROPIC_MODEL,
+        max_tokens=5000,
+        system=_with_extra_instructions(JYOTISH_SYSTEM_PROMPT),
         messages=[{"role": "user", "content": user_message}],
     )
     return "".join(block.text for block in response.content if block.type == "text")

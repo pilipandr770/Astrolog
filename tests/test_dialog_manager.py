@@ -80,6 +80,65 @@ def test_pick_teaser_findings_empty_input():
     assert _pick_teaser_findings([]) == []
 
 
+def test_send_teaser_dispatches_to_lal_kitab_by_default():
+    with patch.object(dialog_manager, "_send_lal_kitab_teaser") as mock_lk, \
+         patch.object(dialog_manager, "_send_jyotish_teaser") as mock_jy:
+        dialog_manager._send_teaser("491234567", {})
+    mock_lk.assert_called_once_with("491234567", {})
+    mock_jy.assert_not_called()
+
+
+def test_send_teaser_dispatches_to_jyotish_when_selected():
+    state = {"astro_method": "jyotish"}
+    with patch.object(dialog_manager, "_send_lal_kitab_teaser") as mock_lk, \
+         patch.object(dialog_manager, "_send_jyotish_teaser") as mock_jy:
+        dialog_manager._send_teaser("491234567", state)
+    mock_jy.assert_called_once_with("491234567", state)
+    mock_lk.assert_not_called()
+
+
+def test_send_jyotish_teaser_computes_dasha_and_sends_text():
+    state = {
+        "birth_date": "1990-05-15", "birth_time": "14:30", "birth_place": "Berlin",
+        "birth_lat": 52.52, "birth_lon": 13.405, "birth_tz": "Europe/Berlin",
+    }
+    fake_chart = {"positions": {"Moon": {"longitude": 45.0}}, "houses": {}, "findings": []}
+    fake_current = {
+        "mahadasha": {"lord": "Sun", "start_date": None, "end_date": None, "years": 6},
+        "antardasha": {"lord": "Moon", "start_date": None, "end_date": None, "years": 1},
+    }
+    fake_effect = object()
+
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager.natal_chart, "compute", return_value=fake_chart), \
+         patch.object(dialog_manager.dasha, "compute_current_dasha", return_value=fake_current) as mock_dasha, \
+         patch.object(dialog_manager.jyotish, "get_dasha_effect", return_value=fake_effect) as mock_effect, \
+         patch.object(dialog_manager.claude_service, "generate_jyotish_teaser", return_value="Teaser!") as mock_gen:
+        dialog_manager._send_jyotish_teaser("491234567", state)
+
+    mock_dasha.assert_called_once()
+    mock_effect.assert_called_once_with("Sun", "Moon")
+    mock_gen.assert_called_once_with(state, fake_current["mahadasha"], fake_current["antardasha"], fake_effect)
+    mock_evo.send_text.assert_called_once_with("491234567", "Teaser!")
+
+
+def test_send_jyotish_teaser_skips_silently_beyond_horizon():
+    state = {
+        "birth_date": "1990-05-15", "birth_time": "14:30", "birth_place": "Berlin",
+        "birth_lat": 52.52, "birth_lon": 13.405, "birth_tz": "Europe/Berlin",
+    }
+    fake_chart = {"positions": {"Moon": {"longitude": 45.0}}, "houses": {}, "findings": []}
+
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager.natal_chart, "compute", return_value=fake_chart), \
+         patch.object(dialog_manager.dasha, "compute_current_dasha", return_value={"mahadasha": None, "antardasha": None}), \
+         patch.object(dialog_manager.claude_service, "generate_jyotish_teaser") as mock_gen:
+        dialog_manager._send_jyotish_teaser("491234567", state)
+
+    mock_gen.assert_not_called()
+    mock_evo.send_text.assert_not_called()
+
+
 def test_capture_language_signal_stores_first_sample():
     with patch.object(dialog_manager.conversation_state, "update") as mock_update:
         _capture_language_signal("491234567", {}, "Hello, I need a horoscope")
@@ -132,7 +191,7 @@ def test_handle_sales_chat_stays_in_chat_when_not_ready():
     with patch.object(dialog_manager, "evolution_api") as mock_evo, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager.claude_service, "generate_sales_reply") as mock_reply:
-        mock_reply.return_value = ("Klar, erzähl mir gern, was dich interessiert!", False)
+        mock_reply.return_value = ("Klar, erzähl mir gern, was dich interessiert!", False, None)
         _handle_sales_chat("491234567", "Was kostet das denn?", {})
 
     mock_state.update.assert_called_once()
@@ -153,11 +212,11 @@ def test_handle_sales_chat_transitions_to_awaiting_date_when_ready():
     with patch.object(dialog_manager, "evolution_api") as mock_evo, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager.claude_service, "generate_sales_reply") as mock_reply:
-        mock_reply.return_value = ("Super, dann leg los!", True)
+        mock_reply.return_value = ("Super, dann leg los!", True, "jyotish")
         _handle_sales_chat("491234567", "Ja, lass uns anfangen", {})
 
     mock_state.update.assert_called_once_with(
-        "491234567", state="awaiting_date", sales_chat_history=None
+        "491234567", state="awaiting_date", sales_chat_history=None, astro_method="jyotish"
     )
     assert mock_evo.send_text.call_count == 2
     assert mock_evo.send_text.call_args_list[0][0][1] == "Super, dann leg los!"
@@ -171,7 +230,7 @@ def test_handle_sales_chat_passes_existing_history_and_caps_length():
     with patch.object(dialog_manager, "evolution_api"), \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager.claude_service, "generate_sales_reply") as mock_reply:
-        mock_reply.return_value = ("Antwort", False)
+        mock_reply.return_value = ("Antwort", False, None)
         _handle_sales_chat("491234567", "weiter", state)
 
     assert mock_reply.call_args[0][1] == long_history
@@ -210,7 +269,7 @@ def test_handle_post_report_chat_uses_stored_interpretation_and_saves_history():
     mock_reply.assert_called_once_with(
         state, "Dein Mond steht im 4. Haus...", [], "Was bedeutet mein Mondhaus?",
         calendar_end_date="2026-08-02", now_str="05.07.2026 14:32 Uhr (Europe/Berlin)",
-        today_snapshot=fake_snapshot,
+        today_snapshot=fake_snapshot, today_dasha=None,
     )
     mock_evo.send_text.assert_called_once_with("491234567", "Das bedeutet, dass...")
     saved_history = json.loads(mock_state.update.call_args[1]["post_report_chat_history"])
@@ -218,6 +277,32 @@ def test_handle_post_report_chat_uses_stored_interpretation_and_saves_history():
         {"role": "user", "content": "Was bedeutet mein Mondhaus?"},
         {"role": "assistant", "content": "Das bedeutet, dass..."},
     ]
+
+
+def test_handle_post_report_chat_uses_jyotish_snapshot_when_method_selected():
+    state = {
+        "astro_method": "jyotish",
+        "last_interpretation": "Deine Sonne-Mond-Antardasha bedeutet...",
+        "post_report_chat_history": None,
+        "report_calendar_end_date": "2026-08-02",
+    }
+    fake_now = datetime(2026, 7, 5, 14, 32, tzinfo=dialog_manager.BERLIN_TZ)
+    fake_dasha_snapshot = {"mahadasha": {"lord": "Sun"}, "antardasha": {"lord": "Moon"}, "effect": None}
+
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager, "conversation_state"), \
+         patch.object(dialog_manager, "_now_in_berlin", return_value=fake_now), \
+         patch.object(dialog_manager.report_generator, "compute_today_snapshot") as mock_lk_snap, \
+         patch.object(dialog_manager.report_generator, "compute_jyotish_today_snapshot", return_value=fake_dasha_snapshot) as mock_jy_snap, \
+         patch.object(dialog_manager.claude_service, "generate_post_report_reply") as mock_reply:
+        mock_reply.return_value = ("Antwort", False)
+        _handle_post_report_chat("491234567", "Wie steht es gerade für mich?", state)
+
+    mock_jy_snap.assert_called_once_with(state, target_date=date(2026, 7, 5))
+    mock_lk_snap.assert_not_called()
+    assert mock_reply.call_args.kwargs["today_snapshot"] is None
+    assert mock_reply.call_args.kwargs["today_dasha"] == fake_dasha_snapshot
+    mock_evo.send_text.assert_called_once_with("491234567", "Antwort")
 
 
 def test_handle_post_report_chat_falls_back_without_stored_report():

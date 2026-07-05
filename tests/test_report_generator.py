@@ -167,3 +167,95 @@ def test_compute_today_snapshot_returns_first_day_of_single_day_calendar():
 def test_compute_today_snapshot_returns_none_on_error():
     with patch.object(report_generator.natal_chart, "compute", side_effect=RuntimeError("swe")):
         assert report_generator.compute_today_snapshot(_paid_state()) is None
+
+
+def _jyotish_state(phone="491234567"):
+    state = _paid_state(phone)
+    state["astro_method"] = "jyotish"
+    return state
+
+
+def _fake_chart_with_moon():
+    chart = _fake_chart()
+    chart["positions"] = {"Moon": {"longitude": 45.0, "sign": "Taurus"}}
+    return chart
+
+
+def _fake_current_dasha():
+    return {
+        "mahadasha": {"lord": "Sun", "start_date": date(2020, 1, 1), "end_date": date(2026, 1, 1), "years": 6.0},
+        "antardasha": {"lord": "Moon", "start_date": date(2024, 1, 1), "end_date": date(2024, 11, 1), "years": 0.83},
+    }
+
+
+def test_generate_and_send_report_dispatches_to_jyotish_path(tmp_path):
+    fake_segments = [{
+        "start_date": date.today(), "end_date": date.today() + timedelta(days=30),
+        "mahadasha_lord": "Sun", "antardasha_lord": "Moon",
+    }]
+    fake_effect = object()
+
+    with patch.object(report_generator, "REPORTS_DIR", str(tmp_path)), \
+         patch.object(report_generator.conversation_state, "get_or_create", return_value=_jyotish_state()), \
+         patch.object(report_generator.conversation_state, "update") as mock_update, \
+         patch.object(report_generator.natal_chart, "compute", return_value=_fake_chart_with_moon()), \
+         patch.object(report_generator.dasha, "compute_current_dasha", return_value=_fake_current_dasha()), \
+         patch.object(report_generator.dasha, "compute_month_segments", return_value=fake_segments), \
+         patch.object(report_generator.jyotish, "get_dasha_effect", return_value=fake_effect) as mock_effect, \
+         patch.object(report_generator.claude_service, "generate_jyotish_interpretation", return_value="Jyotish-Text") as mock_claude, \
+         patch.object(report_generator.pdf_generator, "generate_jyotish_report_pdf") as mock_pdf, \
+         patch.object(report_generator.evolution_api, "send_document") as mock_doc:
+        assert report_generator.generate_and_send_report("491234567") is True
+
+    mock_effect.assert_called_once_with("Sun", "Moon")
+    mock_claude.assert_called_once()
+    assert mock_claude.call_args[0][2] == _fake_current_dasha()["mahadasha"]
+    assert mock_claude.call_args[0][3] == _fake_current_dasha()["antardasha"]
+    assert mock_claude.call_args.kwargs["month_segments"] == fake_segments
+    mock_pdf.assert_called_once()
+    assert mock_pdf.call_args[0][1] == {
+        "date": "15.05.1990", "time": "14:30", "place": "Berlin, Deutschland",
+    }
+    assert mock_pdf.call_args.kwargs["segments"] == fake_segments
+    mock_doc.assert_called_once()
+    assert mock_doc.call_args[0][2] == "Jyotish-Auswertung.pdf"
+    expected_end_date = (date.today() + timedelta(days=report_generator.CALENDAR_DAYS - 1)).isoformat()
+    mock_update.assert_called_once_with(
+        "491234567", state="report_sent", last_interpretation="Jyotish-Text",
+        post_report_chat_history=None, report_calendar_end_date=expected_end_date,
+    )
+
+
+def test_generate_and_send_report_jyotish_fails_beyond_dasha_horizon():
+    with patch.object(report_generator.conversation_state, "get_or_create", return_value=_jyotish_state()), \
+         patch.object(report_generator.conversation_state, "update") as mock_update, \
+         patch.object(report_generator.natal_chart, "compute", return_value=_fake_chart_with_moon()), \
+         patch.object(report_generator.dasha, "compute_current_dasha", return_value={"mahadasha": None, "antardasha": None}), \
+         patch.object(report_generator.evolution_api, "send_text") as mock_text:
+        assert report_generator.generate_and_send_report("491234567") is False
+
+    mock_update.assert_not_called()
+    mock_text.assert_called_once()
+
+
+def test_compute_jyotish_today_snapshot_returns_dasha_and_effect():
+    fake_effect = object()
+    with patch.object(report_generator.natal_chart, "compute", return_value=_fake_chart_with_moon()), \
+         patch.object(report_generator.dasha, "compute_current_dasha", return_value=_fake_current_dasha()), \
+         patch.object(report_generator.jyotish, "get_dasha_effect", return_value=fake_effect):
+        result = report_generator.compute_jyotish_today_snapshot(_jyotish_state())
+
+    assert result["mahadasha"] == _fake_current_dasha()["mahadasha"]
+    assert result["antardasha"] == _fake_current_dasha()["antardasha"]
+    assert result["effect"] is fake_effect
+
+
+def test_compute_jyotish_today_snapshot_returns_none_beyond_horizon():
+    with patch.object(report_generator.natal_chart, "compute", return_value=_fake_chart_with_moon()), \
+         patch.object(report_generator.dasha, "compute_current_dasha", return_value={"mahadasha": None, "antardasha": None}):
+        assert report_generator.compute_jyotish_today_snapshot(_jyotish_state()) is None
+
+
+def test_compute_jyotish_today_snapshot_returns_none_on_error():
+    with patch.object(report_generator.natal_chart, "compute", side_effect=RuntimeError("swe")):
+        assert report_generator.compute_jyotish_today_snapshot(_jyotish_state()) is None

@@ -24,7 +24,9 @@ from app.config import Config
 from app.models import conversation_state
 from app.services import (
     claude_service,
+    dasha,
     evolution_api,
+    jyotish,
     natal_chart,
     pdf_generator,
     transit_forecast,
@@ -65,6 +67,27 @@ def compute_today_snapshot(state: dict, target_date: date | None = None) -> dict
         return None
 
 
+def compute_jyotish_today_snapshot(state: dict, target_date: date | None = None) -> dict | None:
+    """
+    Jyotish-Pendant zu compute_today_snapshot() — liefert {"mahadasha",
+    "antardasha", "effect"} für den Coach (dritte Rolle), wenn
+    state["astro_method"] == "jyotish". None bei Fehlern oder außerhalb des
+    berechneten Horizonts — der Coach antwortet dann ohne Tagesdetails.
+    """
+    try:
+        chart = natal_chart.compute(state)
+        moon_longitude = chart["positions"]["Moon"]["longitude"]
+        birth_date = date.fromisoformat(state["birth_date"])
+        current = dasha.compute_current_dasha(moon_longitude, birth_date, target_date or date.today())
+        if current["mahadasha"] is None or current["antardasha"] is None:
+            return None
+        effect = jyotish.get_dasha_effect(current["mahadasha"]["lord"], current["antardasha"]["lord"])
+        return {"mahadasha": current["mahadasha"], "antardasha": current["antardasha"], "effect": effect}
+    except Exception:
+        logger.exception("Jyotish-Tages-Snapshot fehlgeschlagen für Bericht-Chat")
+        return None
+
+
 def _short_place(display_name: str) -> str:
     """
     Nominatim-display_name ist sehr lang ("Чернігів, Чернігівська міська
@@ -97,11 +120,22 @@ def generate_and_send_report(phone: str) -> bool:
 
 
 def _generate_and_send(phone: str) -> bool:
+    """
+    Verzweigt nach der in Rolle 1 gewählten Methode (state["astro_method"],
+    siehe claude_service.ASTRO_METHODS) — zwei unabhängige Pfade, keine
+    Vermischung der Deutungen (siehe docs/TODO.md Punkt 10).
+    """
     state = conversation_state.get_or_create(phone)
     if state.get("state") != "paid":
         logger.info("Kein Bericht für %s: Zustand ist '%s', nicht 'paid'.", phone, state.get("state"))
         return False
 
+    if state.get("astro_method") == "jyotish":
+        return _generate_and_send_jyotish(phone, state)
+    return _generate_and_send_lal_kitab(phone, state)
+
+
+def _generate_and_send_lal_kitab(phone: str, state: dict) -> bool:
     try:
         chart = natal_chart.compute(state)
 
@@ -186,4 +220,89 @@ def _generate_and_send(phone: str) -> bool:
         report_calendar_end_date=calendar_end_date.isoformat() if calendar_end_date else None,
     )
     logger.info("Bericht erfolgreich an %s gesendet.", phone)
+    return True
+
+
+def _generate_and_send_jyotish(phone: str, state: dict) -> bool:
+    """
+    Jyotish-Pendant zu _generate_and_send_lal_kitab() — eigener Pfad, siehe
+    docs/TODO.md Punkt 10. Nutzt dasha.py/jyotish.py statt lal_kitab.py/
+    transit_forecast.py, und pdf_generator.generate_jyotish_report_pdf()
+    statt generate_report_pdf().
+    """
+    try:
+        chart = natal_chart.compute(state)
+        moon_longitude = chart["positions"]["Moon"]["longitude"]
+        birth_date = date.fromisoformat(state["birth_date"])
+
+        report_start = date.today()
+        current = dasha.compute_current_dasha(moon_longitude, birth_date, report_start)
+        mahadasha, antardasha = current["mahadasha"], current["antardasha"]
+        if mahadasha is None or antardasha is None:
+            raise ValueError("Dasha-Berechnung außerhalb des berechneten Horizonts")
+
+        effect = jyotish.get_dasha_effect(mahadasha["lord"], antardasha["lord"])
+
+        # 30-Tage-Zeitplan: Fehler hier sind nicht fatal — der Bericht geht
+        # dann ohne Zeitplan-Tabelle raus (Analog zum Lal-Kitab-Kalender).
+        segments = None
+        calendar_end_date = None
+        try:
+            segments = dasha.compute_month_segments(
+                moon_longitude, birth_date, start_date=report_start, days=CALENDAR_DAYS
+            )
+            calendar_end_date = report_start + timedelta(days=CALENDAR_DAYS - 1)
+        except Exception:
+            logger.exception(
+                "Dasha-Monatsplan-Berechnung fehlgeschlagen für %s — Bericht ohne Zeitplan", phone
+            )
+
+        interpretation = claude_service.generate_jyotish_interpretation(
+            state, chart["houses"], mahadasha, antardasha, effect, month_segments=segments,
+        )
+
+        birth_date_display = birth_date.strftime("%d.%m.%Y")
+        birth_time_display = state["birth_time"]
+        if chart["is_time_approximate"]:
+            birth_time_display += " (~12:00)"
+
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        pdf_path = os.path.join(REPORTS_DIR, f"report_{phone}.pdf")
+        pdf_generator.generate_jyotish_report_pdf(
+            pdf_path,
+            {
+                "date": birth_date_display,
+                "time": birth_time_display,
+                "place": _short_place(state["birth_place"]),
+            },
+            interpretation,
+            segments=segments,
+        )
+
+        evolution_api.send_document(
+            phone,
+            pdf_path,
+            "Jyotish-Auswertung.pdf",
+            caption="Hier ist deine persönliche Jyotish-Auswertung. 🌙",
+        )
+    except Exception:
+        logger.exception("Jyotish-Berichts-Pipeline fehlgeschlagen für %s", phone)
+        try:
+            evolution_api.send_text(
+                phone,
+                "Bei der Erstellung deines Berichts ist leider ein Fehler "
+                "aufgetreten. Keine Sorge — deine Zahlung ist registriert. "
+                "Schreib mir einfach eine beliebige Nachricht, dann versuche "
+                "ich es sofort noch einmal.",
+            )
+        except Exception:
+            logger.exception("Fehlerbenachrichtigung an %s fehlgeschlagen", phone)
+        return False
+
+    conversation_state.update(
+        phone, state="report_sent", last_interpretation=interpretation,
+        post_report_chat_history=None,
+        report_calendar_end_date=calendar_end_date.isoformat() if calendar_end_date else None,
+    )
+    logger.info("Jyotish-Bericht erfolgreich an %s gesendet.", phone)
     return True

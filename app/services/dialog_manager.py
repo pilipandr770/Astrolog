@@ -34,8 +34,10 @@ from app.config import Config
 from app.models import conversation_state
 from app.services import (
     claude_service,
+    dasha,
     evolution_api,
     geocoding,
+    jyotish,
     message_parser,
     natal_chart,
     report_generator,
@@ -90,6 +92,7 @@ def handle_message(phone: str, message: dict) -> None:
             birth_lon=None,
             birth_tz=None,
             style=None,
+            astro_method=None,
             paid=0,
             stripe_session_id=None,
             sales_chat_history=None,
@@ -186,7 +189,7 @@ def _handle_sales_chat(phone: str, text: str, state: dict) -> None:
     history = json.loads(state.get("sales_chat_history") or "[]")
 
     try:
-        reply_text, ready = claude_service.generate_sales_reply(state, history, text)
+        reply_text, ready, method = claude_service.generate_sales_reply(state, history, text)
     except Exception:
         logger.exception("Sales-Chat-Antwort fehlgeschlagen für %s", phone)
         evolution_api.send_text(
@@ -209,7 +212,7 @@ def _handle_sales_chat(phone: str, text: str, state: dict) -> None:
 
     if ready:
         conversation_state.update(
-            phone, state="awaiting_date", sales_chat_history=None
+            phone, state="awaiting_date", sales_chat_history=None, astro_method=method
         )
         evolution_api.send_text(phone, reply_text)
         evolution_api.send_text(
@@ -239,10 +242,16 @@ def _handle_post_report_chat(phone: str, text: str, state: dict) -> None:
     # Feste Referenz "jetzt" in Berliner Zeit (nicht Server-UTC) — sowohl für
     # das Kalenderdatum des Snapshots als auch für Datum+Uhrzeit im Prompt.
     now = _now_in_berlin()
-    # Konkrete Blöcke für HEUTE (nicht nur die Monats-Zusammenfassung) — macht
-    # Antworten auf "wie wird mein Tag heute?" spürbar persönlicher. Fehler
-    # hier blockieren die Antwort NICHT (siehe compute_today_snapshot).
-    today_snapshot = report_generator.compute_today_snapshot(state, target_date=now.date())
+    # Konkrete Daten für HEUTE (nicht nur die Monats-Zusammenfassung) — macht
+    # Antworten auf "wie steht es gerade für mich?" spürbar persönlicher.
+    # Verzweigt nach der gewählten Methode (siehe claude_service.ASTRO_METHODS);
+    # Fehler hier blockieren die Antwort NICHT.
+    today_snapshot = None
+    today_dasha = None
+    if state.get("astro_method") == "jyotish":
+        today_dasha = report_generator.compute_jyotish_today_snapshot(state, target_date=now.date())
+    else:
+        today_snapshot = report_generator.compute_today_snapshot(state, target_date=now.date())
 
     try:
         reply_text, renew = claude_service.generate_post_report_reply(
@@ -253,6 +262,7 @@ def _handle_post_report_chat(phone: str, text: str, state: dict) -> None:
             calendar_end_date=state.get("report_calendar_end_date"),
             now_str=now.strftime("%d.%m.%Y %H:%M Uhr (Europe/Berlin)"),
             today_snapshot=today_snapshot,
+            today_dasha=today_dasha,
         )
     except Exception:
         logger.exception("Nachbetreuungs-Antwort fehlgeschlagen für %s", phone)
@@ -422,6 +432,18 @@ def _pick_teaser_findings(findings: list) -> list:
 
 
 def _send_teaser(phone: str, state: dict) -> None:
+    """
+    Verzweigt nach der in Rolle 1 gewählten Methode (state["astro_method"],
+    siehe claude_service.ASTRO_METHODS) — zwei unabhängige Pfade, keine
+    Vermischung der Deutungen (siehe docs/TODO.md Punkt 10).
+    """
+    if state.get("astro_method") == "jyotish":
+        _send_jyotish_teaser(phone, state)
+    else:
+        _send_lal_kitab_teaser(phone, state)
+
+
+def _send_lal_kitab_teaser(phone: str, state: dict) -> None:
     try:
         chart = natal_chart.compute(state)
     except Exception:
@@ -436,6 +458,32 @@ def _send_teaser(phone: str, state: dict) -> None:
         teaser_text = claude_service.generate_teaser(state, chart["houses"], teaser_findings)
     except Exception:
         logger.exception("Teaser-Text-Generierung fehlgeschlagen für %s", phone)
+        return
+
+    evolution_api.send_text(phone, teaser_text)
+
+
+def _send_jyotish_teaser(phone: str, state: dict) -> None:
+    try:
+        chart = natal_chart.compute(state)
+        moon_longitude = chart["positions"]["Moon"]["longitude"]
+        birth_date = date.fromisoformat(state["birth_date"])
+        current = dasha.compute_current_dasha(moon_longitude, birth_date, date.today())
+    except Exception:
+        logger.exception("Dasha-Berechnung für Teaser fehlgeschlagen für %s", phone)
+        return  # kein Teaser, aber der Zahlungslink wird trotzdem verschickt
+
+    if current["mahadasha"] is None or current["antardasha"] is None:
+        return  # außerhalb des berechneten Horizonts (siehe dasha.compute_current_dasha)
+
+    effect = jyotish.get_dasha_effect(current["mahadasha"]["lord"], current["antardasha"]["lord"])
+
+    try:
+        teaser_text = claude_service.generate_jyotish_teaser(
+            state, current["mahadasha"], current["antardasha"], effect
+        )
+    except Exception:
+        logger.exception("Jyotish-Teaser-Text-Generierung fehlgeschlagen für %s", phone)
         return
 
     evolution_api.send_text(phone, teaser_text)

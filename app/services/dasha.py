@@ -154,3 +154,35 @@ def compute_current_dasha(moon_longitude: float, birth_date: date, on_date: date
     antardasha_sequence = compute_antardasha_sequence(mahadasha)
     antardasha = _find_at_date(antardasha_sequence, on_date)
     return {"mahadasha": mahadasha, "antardasha": antardasha}
+
+
+def compute_month_segments(
+    moon_longitude: float, birth_date: date, start_date: date, days: int = 30
+) -> list[dict]:
+    """
+    Liefert die Antardasha-Segmente, die das Fenster [start_date,
+    start_date+days) überschneiden — für den Jyotish-Monatsbericht (siehe
+    report_generator/pdf_generator). Jedes Segment:
+    {"start_date", "end_date", "mahadasha_lord", "antardasha_lord"},
+    auf das Fenster zugeschnitten (geclippt) — meist nur 1 Segment, da eine
+    Antardasha typischerweise deutlich länger als 30 Tage dauert; mehrere
+    Segmente nur, wenn ein Antardasha- (oder seltener Mahadasha-)Wechsel
+    genau in diesen Zeitraum fällt.
+    """
+    window_end = start_date + timedelta(days=days)
+    mahadasha_sequence = compute_mahadasha_sequence(moon_longitude, birth_date, count=9)
+
+    segments = []
+    for mahadasha in mahadasha_sequence:
+        if mahadasha["end_date"] <= start_date or mahadasha["start_date"] >= window_end:
+            continue  # dieser Mahadasha-Zeitraum liegt komplett außerhalb des Fensters
+        for antardasha in compute_antardasha_sequence(mahadasha):
+            if antardasha["end_date"] <= start_date or antardasha["start_date"] >= window_end:
+                continue
+            segments.append({
+                "start_date": max(antardasha["start_date"], start_date),
+                "end_date": min(antardasha["end_date"], window_end),
+                "mahadasha_lord": mahadasha["lord"],
+                "antardasha_lord": antardasha["lord"],
+            })
+    return segments

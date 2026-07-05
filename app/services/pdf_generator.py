@@ -56,3 +56,26 @@ def generate_report_pdf(
     )
     HTML(string=html_content).write_pdf(output_path)
     return output_path
+
+
+def generate_jyotish_report_pdf(
+    output_path: str,
+    birth_data: dict,
+    interpretation_text: str,
+    segments: list | None = None,
+):
+    """
+    Jyotish-Pendant zu generate_report_pdf() — eigenes Template
+    (jyotish_report.html) mit einem Dasha-Zeitplan (Mahadasha/Antardasha-
+    Segmente, siehe app.services.dasha.compute_month_segments) statt der
+    2-Stunden-Kalendergrid von Lal Kitab.
+    """
+    template = env.get_template("jyotish_report.html")
+    interpretation_html = markdown.markdown(interpretation_text, extensions=["tables"])
+    html_content = template.render(
+        birth_data=birth_data,
+        interpretation_html=interpretation_html,
+        segments=segments,
+    )
+    HTML(string=html_content).write_pdf(output_path)
+    return output_path

@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from datetime import date
+from datetime import date, timedelta
 
 from app.services import dasha
 
@@ -128,3 +128,36 @@ def test_compute_current_dasha_returns_none_beyond_horizon():
     result = dasha.compute_current_dasha(0.0, birth, far_future)
     assert result["mahadasha"] is None
     assert result["antardasha"] is None
+
+
+def test_compute_month_segments_single_segment_when_no_transition():
+    birth = date(1990, 5, 15)
+    # Mitten in der Ketu-Mahadasha/Antardasha (Ashwini-Anfang) -> 30 Tage
+    # ab kurz nach Geburt liegen sicher noch innerhalb desselben Segments.
+    segments = dasha.compute_month_segments(0.0, birth, start_date=birth, days=30)
+    assert len(segments) == 1
+    assert segments[0]["mahadasha_lord"] == "Ketu"
+    assert segments[0]["antardasha_lord"] == "Ketu"
+    assert segments[0]["start_date"] == birth
+    assert segments[0]["end_date"] == birth + timedelta(days=30)
+
+
+def test_compute_month_segments_splits_at_antardasha_transition():
+    birth = date(1990, 5, 15)
+    # Ketu-Antardasha (7 Jahre * 7/120 ≈ 0.408 Jahre ≈ 149 Tage) innerhalb
+    # der Ketu-Mahadasha endet früh -> ein Fenster, das diesen Übergang
+    # überspannt, muss mindestens 2 Segmente liefern.
+    segments = dasha.compute_month_segments(0.0, birth, start_date=birth, days=200)
+    assert len(segments) >= 2
+    assert segments[0]["start_date"] == birth
+    # Segmente sind lückenlos aneinandergereiht.
+    for prev, nxt in zip(segments, segments[1:]):
+        assert prev["end_date"] == nxt["start_date"]
+    assert segments[-1]["end_date"] == birth + timedelta(days=200)
+
+
+def test_compute_month_segments_returns_empty_beyond_horizon():
+    birth = date(1990, 5, 15)
+    far_future = date(2200, 1, 1)
+    segments = dasha.compute_month_segments(0.0, birth, start_date=far_future, days=30)
+    assert segments == []

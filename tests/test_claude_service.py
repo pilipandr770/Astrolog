@@ -2,9 +2,10 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from datetime import date
 from unittest.mock import patch
 
-from app.services import claude_service
+from app.services import claude_service, jyotish
 
 
 def test_with_extra_instructions_passthrough_when_empty():
@@ -43,7 +44,9 @@ def _fake_sales_response(text=None, tool_called=False):
     if text is not None:
         blocks.append(type("TextBlock", (), {"type": "text", "text": text})())
     if tool_called:
-        blocks.append(type("ToolBlock", (), {"type": "tool_use", "name": "start_intake"})())
+        blocks.append(type("ToolBlock", (), {
+            "type": "tool_use", "name": "start_intake", "input": {"method": tool_called},
+        })())
     return type("Response", (), {"content": blocks})()
 
 
@@ -52,24 +55,26 @@ def test_generate_sales_reply_not_ready_without_tool_call():
 
     with patch.object(claude_service.settings, "get_setting", return_value=""), \
          patch.object(claude_service.client.messages, "create", return_value=fake_response) as mock_create:
-        text, ready = claude_service.generate_sales_reply({}, [], "Was kostet das?")
+        text, ready, method = claude_service.generate_sales_reply({}, [], "Was kostet das?")
 
     assert text == "Klar, frag gern weiter!"
     assert ready is False
+    assert method is None
     assert mock_create.call_args.kwargs["tools"] == [claude_service.START_INTAKE_TOOL]
     sent_messages = mock_create.call_args.kwargs["messages"]
     assert sent_messages[-1] == {"role": "user", "content": "Was kostet das?"}
 
 
 def test_generate_sales_reply_ready_when_tool_called():
-    fake_response = _fake_sales_response(text="Super, dann los!", tool_called=True)
+    fake_response = _fake_sales_response(text="Super, dann los!", tool_called="jyotish")
 
     with patch.object(claude_service.settings, "get_setting", return_value=""), \
          patch.object(claude_service.client.messages, "create", return_value=fake_response):
-        text, ready = claude_service.generate_sales_reply({}, [], "Ja, lass uns starten")
+        text, ready, method = claude_service.generate_sales_reply({}, [], "Ja, lass uns starten")
 
     assert text == "Super, dann los!"
     assert ready is True
+    assert method == "jyotish"
 
 
 def test_generate_sales_reply_includes_prior_history_in_messages():
@@ -183,3 +188,75 @@ def test_generate_post_report_reply_renew_true_when_tool_called():
 
     assert text == "Perfekt, ich erstelle dir die Fortsetzung."
     assert renew is True
+
+
+def _fake_dasha_effect(mahadasha_lord="Sun", antardasha_lord="Moon"):
+    return jyotish.DashaEffect(
+        rule_id=f"dasha_{mahadasha_lord.lower()}_{antardasha_lord.lower()}",
+        mahadasha_lord=mahadasha_lord,
+        antardasha_lord=antardasha_lord,
+        summary="Testzusammenfassung der Dasha-Kombination.",
+        severity="mixed",
+        benefit_effects=[{"condition": "Moon exalted", "effect": "Gute Ernte."}],
+        malefic_effects=[{"condition": "Moon in House 8", "effect": "Verlust."}],
+        remedy="Charity of a white cow.",
+    )
+
+
+def test_generate_jyotish_teaser_includes_dasha_periods_and_effect():
+    fake_block = type("Block", (), {"type": "text", "text": "Teaser-Text"})()
+    fake_response = type("Response", (), {"content": [fake_block]})()
+    mahadasha = {"lord": "Sun", "start_date": date(2020, 1, 1), "end_date": date(2026, 1, 1), "years": 6.0}
+    antardasha = {"lord": "Moon", "start_date": date(2024, 1, 1), "end_date": date(2024, 11, 1), "years": 0.83}
+
+    with patch.object(claude_service.settings, "get_setting", return_value=""), \
+         patch.object(claude_service.client.messages, "create", return_value=fake_response) as mock_create:
+        result = claude_service.generate_jyotish_teaser({}, mahadasha, antardasha, _fake_dasha_effect())
+
+    assert result == "Teaser-Text"
+    user_message = mock_create.call_args.kwargs["messages"][0]["content"]
+    assert "Sun" in user_message
+    assert "Moon" in user_message
+    assert "Testzusammenfassung" in user_message
+    assert mock_create.call_args.kwargs["system"] == claude_service.JYOTISH_TEASER_SYSTEM_PROMPT
+
+
+def test_generate_jyotish_interpretation_includes_houses_and_month_section():
+    fake_block = type("Block", (), {"type": "text", "text": "Auswertung"})()
+    fake_response = type("Response", (), {"content": [fake_block]})()
+    mahadasha = {"lord": "Sun", "start_date": date(2020, 1, 1), "end_date": date(2026, 1, 1), "years": 6.0}
+    antardasha = {"lord": "Moon", "start_date": date(2024, 1, 1), "end_date": date(2024, 11, 1), "years": 0.83}
+    month_segments = [{
+        "start_date": date(2026, 7, 5), "end_date": date(2026, 8, 4),
+        "mahadasha_lord": "Sun", "antardasha_lord": "Moon",
+    }]
+
+    with patch.object(claude_service.settings, "get_setting", return_value=""), \
+         patch.object(claude_service.client.messages, "create", return_value=fake_response) as mock_create:
+        result = claude_service.generate_jyotish_interpretation(
+            {"style": "warm"}, {"Moon": {"sign": "Cancer", "house": 6}},
+            mahadasha, antardasha, _fake_dasha_effect(), month_segments=month_segments,
+        )
+
+    assert result == "Auswertung"
+    assert mock_create.call_args.kwargs["system"] == claude_service._with_extra_instructions(claude_service.JYOTISH_SYSTEM_PROMPT)
+    user_message = mock_create.call_args.kwargs["messages"][0]["content"]
+    assert "Cancer" in user_message
+    assert "05.07.2026" in user_message
+    assert "04.08.2026" in user_message
+
+
+def test_generate_jyotish_interpretation_handles_missing_effect():
+    fake_block = type("Block", (), {"type": "text", "text": "Auswertung"})()
+    fake_response = type("Response", (), {"content": [fake_block]})()
+    mahadasha = {"lord": "Sun", "start_date": date(2020, 1, 1), "end_date": date(2026, 1, 1), "years": 6.0}
+    antardasha = {"lord": "Moon", "start_date": date(2024, 1, 1), "end_date": date(2024, 11, 1), "years": 0.83}
+
+    with patch.object(claude_service.settings, "get_setting", return_value=""), \
+         patch.object(claude_service.client.messages, "create", return_value=fake_response) as mock_create:
+        claude_service.generate_jyotish_interpretation(
+            {}, {}, mahadasha, antardasha, None,
+        )
+
+    user_message = mock_create.call_args.kwargs["messages"][0]["content"]
+    assert "Keine Deutung" in user_message
