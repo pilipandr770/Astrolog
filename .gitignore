@@ -10,3 +10,4 @@ ephe/*.se1
 # Итоговые правила уже переработаны и лежат в docs/lal_kitab_rules.yaml /
 # docs/lal_kitab_rin.yaml, которые ОСТАЮТСЯ в репозитории.
 docs/lal_kitab_source/
+docs/jyotish_source/
