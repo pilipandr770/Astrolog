@@ -16,13 +16,58 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
+# WhatsApp-Textnachrichten sind praktisch auf ~4096 Zeichen begrenzt (WhatsApp
+# Business API / Baileys) — mit Sicherheitsabstand, damit lange Claude-Antworten
+# (Sales-Chat, Teaser, Coach) nicht mitten im Satz abgeschnitten werden.
+MAX_TEXT_LENGTH = 3500
 
-def send_text(phone: str, text: str) -> dict:
+
+def _find_split_point(text: str, max_length: int) -> int:
+    """
+    Sucht die beste Trennstelle innerhalb der ersten max_length Zeichen —
+    bevorzugt Absatz-, dann Zeilenumbruch, dann Satzende, zuletzt Wortgrenze.
+    Wird nur akzeptiert, wenn sie nicht zu früh liegt (sonst lieber hart am
+    Limit schneiden, als eine winzige erste Nachricht zu erzeugen).
+    """
+    window = text[:max_length]
+    for separator in ("\n\n", "\n", ". ", " "):
+        idx = window.rfind(separator)
+        if idx >= max_length * 0.5:
+            return idx + len(separator)
+    return max_length
+
+
+def _split_text(text: str, max_length: int = MAX_TEXT_LENGTH) -> list[str]:
+    """Teilt langen Text in mehrere WhatsApp-taugliche Nachrichten-Chunks."""
+    if len(text) <= max_length:
+        return [text]
+
+    chunks = []
+    remaining = text
+    while len(remaining) > max_length:
+        split_at = _find_split_point(remaining, max_length)
+        chunks.append(remaining[:split_at].rstrip())
+        remaining = remaining[split_at:].lstrip()
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+
+def send_text(phone: str, text: str) -> list[dict]:
+    """
+    Sendet Text an WhatsApp. Lange Texte werden automatisch in mehrere
+    Nachrichten aufgeteilt (siehe _split_text) statt vom Empfänger
+    abgeschnitten zu werden — Chunks gehen sequenziell raus, damit die
+    Reihenfolge beim Empfänger erhalten bleibt.
+    """
     url = f"{BASE_URL}/message/sendText/{INSTANCE}"
-    payload = {"number": phone, "text": text}
-    response = requests.post(url, json=payload, headers=HEADERS, timeout=20)
-    response.raise_for_status()
-    return response.json()
+    responses = []
+    for chunk in _split_text(text):
+        payload = {"number": phone, "text": chunk}
+        response = requests.post(url, json=payload, headers=HEADERS, timeout=20)
+        response.raise_for_status()
+        responses.append(response.json())
+    return responses
 
 
 def send_document(phone: str, file_path: str, filename: str, caption: str = "") -> dict:
