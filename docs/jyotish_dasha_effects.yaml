@@ -593,3 +593,195 @@
     - condition: "Moon rules House 2 (Dhan) or House 7 (Yuvati)"
       effect: "Possibility of premature death, bodily distress, mental agony."
   remedy: "Recitation of mantras of Goddess Durga and Goddess Lakshmi."
+
+- id: dasha_rahu_rahu
+  mahadasha_lord: Rahu
+  antardasha_lord: Rahu
+  summary: >
+    Rahu's own sub-period within its own main period — favours ambition,
+    status and family happiness in specific signs/houses, with fairly
+    sharp affliction effects otherwise.
+  severity: mixed
+  benefit_effects:
+    - condition: "Rahu in Cancer, Scorpio, Virgo, or Sagittarius, AND in House 3 (Sahaja), 6 (Ari), 10 (Karma), or 11 (Labha), or conjunct a Yogakaraka planet in its exaltation sign"
+      effect: "Acquisition of a position of authority, enthusiasm, cordial relations with authority figures, happiness through spouse and children, growth in property."
+  malefic_effects:
+    - condition: "Rahu in House 8 or House 12, or associated with malefics"
+      effect: "Danger from thieves, distress from wounds, conflict with officials, harm to relatives, distress to spouse and children."
+    - condition: "Rahu rules or occupies House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "General distress and disease."
+  remedy: "Worship of Rahu (mantra recitation), charity of items associated with Rahu."
+
+- id: dasha_rahu_jupiter
+  mahadasha_lord: Rahu
+  antardasha_lord: Jupiter
+  summary: >
+    Favourable for steady, growing prosperity and pilgrimage/religious
+    activity when Jupiter is dignified; affliction brings financial and
+    domestic setbacks rather than acute danger.
+  severity: mixed
+  benefit_effects:
+    - condition: "Jupiter in its exaltation sign, own sign, own Navamsa, or exalted Navamsa, or in a Kendra/Trikona to Lagna"
+      effect: "Gain of a position of authority, patience, destruction of rivals, enjoyment, cordial relations with authority, steady growth of wealth and property, gain of a vehicle and cows, audience with authority through travel (west/south-east), success in undertakings, return to one's homeland, good deeds toward Brahmins, pilgrimage, gain of a village, devotion to deities and Brahmins, family happiness, daily fine food."
+    - condition: "Jupiter in a Kendra, a Trikona, House 11, House 2, or House 3 from the Antardasha lord, with strength"
+      effect: "Gains of land, good food, gains of cattle, inclination toward charitable and religious work."
+  malefic_effects:
+    - condition: "Jupiter in its debilitation sign, combust, in House 6, 8, or 12, in an enemy sign, or associated with malefics"
+      effect: "Loss of wealth, obstacles in work, defamation, distress to spouse and children, heart-related disease, entrusted governmental authority that later proves troublesome."
+    - condition: "Jupiter in House 6, 8, or 12 from the Antardasha lord, or associated with malefics"
+      effect: "Loss of wealth and bodily distress."
+    - condition: "Jupiter rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Danger of premature death."
+  remedy: "Worship of a gold idol of Lord Shiva."
+
+- id: dasha_rahu_saturn
+  mahadasha_lord: Rahu
+  antardasha_lord: Saturn
+  summary: >
+    A notably unpredictable Antardasha — the source describes both
+    domestic favour and financial setback occurring together even under
+    reasonably good placement, and an unusual "sudden gain amid distress"
+    note under affliction.
+  severity: mixed
+  benefit_effects:
+    - condition: "Saturn in a Kendra, a Trikona, its exaltation sign, own sign, its Mulatrikona, House 3 (Sahaja), or House 11 (Labha)"
+      effect: "Favour from authority through devoted service, auspicious home functions such as marriage, construction of a garden or reservoir, gain of wealth and cattle from well-to-do commoners — alongside some financial loss connected with travel and reduced income from lethargy before returning home."
+  malefic_effects:
+    - condition: "Saturn in its debilitation sign, an enemy sign, or House 8 or House 12"
+      effect: "Danger from servants/subordinates, authority and enemies; distress to spouse, children and relatives; disputes with coparceners and in dealings with others — though sometimes accompanied by a sudden gain of ornaments."
+    - condition: "Saturn in House 6, 8, or 12 from the Antardasha lord"
+      effect: "Heart-related disease, defamation, quarrels, danger from enemies, foreign travel, a Gulma-type ailment, poor food, sorrow."
+    - condition: "Saturn rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Premature death is likely."
+  remedy: "Charity of a black cow or a she-buffalo."
+
+- id: dasha_rahu_mercury
+  mahadasha_lord: Rahu
+  antardasha_lord: Mercury
+  summary: >
+    Generally favourable for status and comfort when Mercury is dignified,
+    with a devotional/moral character to the warnings under affliction.
+  severity: mixed
+  benefit_effects:
+    - condition: "Mercury in its exaltation sign, a Kendra, or House 5 (Putra), with strength"
+      effect: "A Raj Yoga-like rise, family wellbeing, business profits, vehicle comfort, marriage and auspicious functions, increase in cattle, comforts — these results are said to manifest especially on Wednesdays in Mercury's month."
+    - condition: "Mercury in a Kendra, House 11, House 3, House 9, or House 10 from the Antardasha lord"
+      effect: "Sound health, fulfillment of cherished wishes, attending discourse on scripture/history, marriage, religious offerings, charity, religious inclination, sympathy toward others."
+  malefic_effects:
+    - condition: "Mercury in House 6, 8, or 12, or aspected by Saturn"
+      effect: "Disrespect toward deities and Brahmins, dishonesty, unwise actions, fear from snakes/thieves/authority, quarrels, distress to spouse and children."
+    - condition: "Mercury rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Fear of premature death."
+  remedy: "Recitation of the Vishnu Sahasranama."
+
+- id: dasha_rahu_ketu
+  mahadasha_lord: Rahu
+  antardasha_lord: Ketu
+  summary: >
+    Difficult by default (foreign travel, health strain, loss of cattle),
+    turning favourable mainly through benefic association or connection to
+    the Lagna lord.
+  severity: caution
+  benefit_effects:
+    - condition: "Ketu aspected by or associated with benefics"
+      effect: "Enjoyment, gain of wealth, recognition from authority, acquisition of gold."
+    - condition: "Ketu related to or associated with the Lagna lord"
+      effect: "Fulfillment of cherished wishes; if associated with the Lagna lord specifically, a definite gain of wealth."
+    - condition: "Ketu in a Kendra or Trikona"
+      effect: "A definite increase in the number of cattle."
+  malefic_effects:
+    - condition: "Default, absent the above"
+      effect: "Foreign travel, danger from authority, rheumatic/feverish illness, loss of cattle."
+    - condition: "Ketu conjunct the lord of House 8 (Randhr)"
+      effect: "Bodily distress and mental tension."
+    - condition: "Ketu weak and placed in House 8 or House 12"
+      effect: "Danger from thieves and snakes, distress from wounds, separation from parents, antagonistic relations with relatives, mental agony."
+    - condition: "Ketu rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Bodily distress."
+  remedy: "Charity of a goat."
+
+- id: dasha_rahu_venus
+  mahadasha_lord: Rahu
+  antardasha_lord: Venus
+  summary: >
+    Strongly favourable for status, comfort and family life when Venus is
+    dignified; affliction (especially with malefic association) brings a
+    notably severe list of health/legal troubles.
+  severity: mixed
+  benefit_effects:
+    - condition: "Venus with strength in a Kendra, a Trikona, or House 11 (Labha)"
+      effect: "Wealth gains connected with religious scholars, increase in cattle, celebrations at a son's birth, wellbeing, government recognition, acquisition of a position of authority, high standing, great enjoyment and comfort."
+    - condition: "Venus in its exaltation sign, own sign, exalted Navamsa, or own Navamsa"
+      effect: "Construction of a new house, fine food, spousal/children happiness, friendship, charitable giving, royal favour, gain of vehicles and clothes, extraordinary business profits, sacred-thread-type ceremonies."
+    - condition: "Venus in a Kendra, a Trikona, House 11, or House 10 from the Antardasha lord"
+      effect: "Enjoyment of perfumes, comfort, music; gain of a desired object; fulfillment of wishes."
+  malefic_effects:
+    - condition: "Venus in House 6, 8, or 12, in its debilitation sign, an enemy sign, or associated with Saturn, Mars, or Rahu"
+      effect: "Disease, quarrels, separation from a son or father, distress to relatives, disputes with coparceners, danger to one's own life or an employer's, unhappiness through spouse and children, stomach pain."
+    - condition: "Venus associated with malefics in House 6, 8, or 12 from the Antardasha lord"
+      effect: "Danger from the wrath of Brahmins/snakes/authority, urinary and metabolic disease (diabetes-like), blood disorders, anemia, only coarse food available, nervous disorder, imprisonment-like restriction, wealth loss from fines/penalties."
+    - condition: "Venus rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Distress to spouse and children, danger of premature death."
+  remedy: "Worship of Goddess Durga and Goddess Lakshmi."
+
+- id: dasha_rahu_sun
+  mahadasha_lord: Rahu
+  antardasha_lord: Sun
+  summary: >
+    Favourable for reputation and status when the Sun is dignified,
+    including a note about foreign recognition; affliction brings illness
+    and conflict.
+  severity: mixed
+  benefit_effects:
+    - condition: "Sun in its exaltation sign, own sign, House 11 (Labha), a Kendra, a Trikona, exalted Navamsa, or own Navamsa"
+      effect: "Cordial relations with authority, increase in wealth and grain, some popularity/respect, a chance of a leadership position within one's community."
+    - condition: "Sun aspected by or associated with the lord of Lagna, House 2 (Dhan), or House 10 (Karma)"
+      effect: "Good reputation, government encouragement and assistance, foreign travel, rise to national leadership, gains of elephants/horses/clothes/ornaments, fulfilled ambitions, happy children."
+    - condition: "Sun in a Kendra, a Trikona, House 3, or House 11 from the Antardasha lord"
+      effect: "Overall wellbeing and recognition from authorities abroad."
+  malefic_effects:
+    - condition: "Sun in its debilitation sign, or in House 6, 8, or 12 from the Antardasha lord"
+      effect: "Fevers, dysentery, other diseases, quarrels, conflict with authority, forced travel, danger from rivals/thieves/fire."
+    - condition: "Sun rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Danger of critical illness."
+  remedy: "Worship of the Sun."
+
+- id: dasha_rahu_moon
+  mahadasha_lord: Rahu
+  antardasha_lord: Moon
+  summary: >
+    Favourable for status, health and property when the Moon is dignified;
+    affliction brings household/agricultural disruption rather than acute
+    personal danger, except where the Moon rules the sensitive houses.
+  severity: mixed
+  benefit_effects:
+    - condition: "Moon in its exaltation sign, own sign, a Kendra, a Trikona, House 11 (Labha), or a friendly sign aspected by benefics"
+      effect: "Acquisition of a position of authority, respect from authority, gains of wealth, sound health, gains of clothes and ornaments, happiness through children, comfort of vehicles, increase in house and landed property."
+    - condition: "Moon in House 5, House 9, a Kendra, or House 11 from the Antardasha lord"
+      effect: "Favour of Goddess Lakshmi, all-round success, increase in wealth and grain, good reputation, devotion to deities."
+  malefic_effects:
+    - condition: "Moon weak and placed in House 6, 8, or 12 from the Antardasha lord"
+      effect: "Disturbances at home and in agricultural activity attributed to malevolent influences/wild animals, danger from thieves while travelling, stomach disorders."
+    - condition: "Moon rules House 2 (Dhan) or House 12 (Vyaya)"
+      effect: "Possibility of premature death."
+  remedy: "Charity of a white cow or a female buffalo."
+
+- id: dasha_rahu_mars
+  mahadasha_lord: Rahu
+  antardasha_lord: Mars
+  summary: >
+    Favourable for recovering lost status/wealth and family happiness when
+    Mars is dignified; affliction brings domestic conflict and physical
+    harm.
+  severity: mixed
+  benefit_effects:
+    - condition: "Mars in House 11 (Labha), House 5 (Putra), House 9 (Dharma), a Kendra, aspected by benefics, or in its exaltation/own sign"
+      effect: "Recovery of lost status and wealth, growth in household/agricultural prosperity, gain of wealth, blessing of one's household deity, children's happiness, good food."
+    - condition: "Mars in a Kendra, House 5, House 9, House 3, or House 11 from the Antardasha lord"
+      effect: "Acquisition of red-coloured garments, travel, audience with authority, wellbeing of children and one's employer, rise to a military command position, enthusiasm, wealth through relatives."
+  malefic_effects:
+    - condition: "Mars in House 6, 8, or 12 from the Antardasha lord, aspected by malefics"
+      effect: "Distress to spouse, children and siblings, loss of position, antagonism with close relatives, danger from thieves, wounds, bodily pain."
+    - condition: "Mars rules House 2 (Dhan) or House 7 (Yuvati)"
+      effect: "Lethargy and danger of death."
+  remedy: "Charity of a cow or a bull."
