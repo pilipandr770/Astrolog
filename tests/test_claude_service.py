@@ -237,9 +237,9 @@ def test_generate_jyotish_interpretation_includes_houses_and_month_section():
             {"style": "warm"}, {"Moon": {"sign": "Cancer", "house": 6}},
             mahadasha, antardasha, _fake_dasha_effect(), month_segments=month_segments,
         )
+        assert mock_create.call_args.kwargs["system"] == claude_service._with_extra_instructions(claude_service.JYOTISH_SYSTEM_PROMPT)
 
     assert result == "Auswertung"
-    assert mock_create.call_args.kwargs["system"] == claude_service._with_extra_instructions(claude_service.JYOTISH_SYSTEM_PROMPT)
     user_message = mock_create.call_args.kwargs["messages"][0]["content"]
     assert "Cancer" in user_message
     assert "05.07.2026" in user_message
