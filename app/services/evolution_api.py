@@ -5,8 +5,12 @@
 payload могли отличаться между версиями Evolution API.
 """
 import base64
+import logging
+
 import requests
 from app.config import Config
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = Config.EVOLUTION_API_URL.rstrip("/")
 INSTANCE = Config.EVOLUTION_INSTANCE_NAME
@@ -109,14 +113,24 @@ def get_media_base64(message_key: dict) -> dict:
 def extract_incoming_message(webhook_payload: dict) -> dict | None:
     """
     Парсит вебхук от Evolution API в упрощённый формат.
-    TODO: сверить с реальной структурой вебхука твоего инстанса —
-    структура ниже основана на типовом messages.upsert событии Evolution
-    API v2, но могут быть отличия по версии.
+
+    Unbekannte/nicht behandelte Payloads werden NICHT stillschweigend
+    verworfen, sondern mit WARNING geloggt (siehe run.py — ohne
+    logging.basicConfig dort gingen solche Meldungen bisher komplett
+    verloren) — nötig, um z.B. abweichende audioMessage-Formate oder
+    andere Webhook-Event-Typen (nicht nur messages.upsert) überhaupt
+    diagnostizieren zu können, statt dass der Bot einfach "nicht antwortet".
     """
     try:
         data = webhook_payload.get("data", {})
+        key = data.get("key", {})
         message = data.get("message", {})
-        phone = data.get("key", {}).get("remoteJid", "").split("@")[0]
+        phone = key.get("remoteJid", "").split("@")[0]
+
+        if key.get("fromMe"):
+            # Echo der eigenen ausgehenden Nachrichten (Evolution schickt
+            # messages.upsert auch dafür) — kein Nutzer-Input, ignorieren.
+            return None
 
         if "conversation" in message:
             return {"phone": phone, "type": "text", "content": message["conversation"]}
@@ -129,9 +143,14 @@ def extract_incoming_message(webhook_payload: dict) -> dict | None:
                 # Debug-Info behalten. Zum Transkribieren message_key an
                 # get_media_base64() geben (siehe dialog_manager._extract_text).
                 "media_url": message["audioMessage"].get("url"),
-                "message_key": data.get("key", {}),
+                "message_key": key,
             }
 
+        logger.warning(
+            "Unbekannter Webhook-Payload-Typ, ignoriert. message-Keys: %s | voller Payload (gekürzt): %s",
+            list(message.keys()), str(webhook_payload)[:1500],
+        )
         return None
     except (KeyError, AttributeError):
+        logger.exception("Webhook-Payload konnte nicht geparst werden: %s", str(webhook_payload)[:1500])
         return None

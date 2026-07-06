@@ -86,3 +86,40 @@ def test_send_text_sends_multiple_sequential_messages_for_long_text():
     for call in mock_post.call_args_list:
         assert len(call.kwargs["json"]["text"]) <= evolution_api.MAX_TEXT_LENGTH
         assert call.kwargs["json"]["number"] == "491234567"
+
+
+def _webhook_payload(message, from_me=False, remote_jid="491234567@s.whatsapp.net"):
+    return {"data": {"key": {"remoteJid": remote_jid, "fromMe": from_me}, "message": message}}
+
+
+def test_extract_incoming_message_parses_text():
+    payload = _webhook_payload({"conversation": "Hallo!"})
+    result = evolution_api.extract_incoming_message(payload)
+    assert result == {"phone": "491234567", "type": "text", "content": "Hallo!"}
+
+
+def test_extract_incoming_message_parses_audio():
+    payload = _webhook_payload({"audioMessage": {"url": "https://mmg.whatsapp.net/xyz.enc"}})
+    result = evolution_api.extract_incoming_message(payload)
+    assert result["phone"] == "491234567"
+    assert result["type"] == "audio"
+    assert result["media_url"] == "https://mmg.whatsapp.net/xyz.enc"
+    assert result["message_key"] == {"remoteJid": "491234567@s.whatsapp.net", "fromMe": False}
+
+
+def test_extract_incoming_message_ignores_own_outgoing_echo():
+    # Evolution schickt messages.upsert auch fuer die eigenen ausgehenden
+    # Nachrichten des Bots (fromMe=True) -- die duerfen NICHT als
+    # Nutzer-Input verarbeitet werden.
+    payload = _webhook_payload({"conversation": "Danke fuer deine Zahlung!"}, from_me=True)
+    assert evolution_api.extract_incoming_message(payload) is None
+
+
+def test_extract_incoming_message_returns_none_for_unknown_type():
+    payload = _webhook_payload({"someOtherMessageType": {"foo": "bar"}})
+    assert evolution_api.extract_incoming_message(payload) is None
+
+
+def test_extract_incoming_message_handles_malformed_payload_gracefully():
+    assert evolution_api.extract_incoming_message({}) is None
+    assert evolution_api.extract_incoming_message({"data": None}) is None
