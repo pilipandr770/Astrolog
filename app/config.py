@@ -59,3 +59,11 @@ class Config:
     # payment_poller.py, `python -m app.services.payment_poller`), sobald
     # mehr als 1 Worker verwendet wird.
     ENABLE_INPROCESS_PAYMENT_POLLER = os.getenv("ENABLE_INPROCESS_PAYMENT_POLLER", "true").lower() == "true"
+
+    # Nachhol-Sync für verpasste Nachrichten (siehe app/services/catchup.py) —
+    # ausgelöst durch das CONNECTION_UPDATE-Webhook-Event, wenn die
+    # WhatsApp-Verbindung wieder auf "open" wechselt (nicht periodisch).
+    ENABLE_CATCHUP_SYNC = os.getenv("ENABLE_CATCHUP_SYNC", "true").lower() == "true"
+    # Schutz gegen zu häufige Läufe, falls die Verbindung kurz hintereinander
+    # mehrfach flattert (mehrere CONNECTION_UPDATE-Events in Folge).
+    CATCHUP_MIN_INTERVAL_SECONDS = int(os.getenv("CATCHUP_MIN_INTERVAL_SECONDS", "60"))

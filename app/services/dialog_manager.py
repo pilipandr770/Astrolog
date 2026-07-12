@@ -27,6 +27,7 @@ app/services/payment_poller.py), а не через вебхук — серве�
 """
 import json
 import logging
+import threading
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -74,12 +75,55 @@ def _now_in_berlin() -> datetime:
     return datetime.now(BERLIN_TZ)
 
 
+# Ein Lock pro Telefonnummer — verhindert, dass derselbe Kontakt gleichzeitig
+# vom Live-Webhook-Pfad UND vom Nachhol-Sync (app/services/catchup.py, siehe
+# Chat-Diskussion zu verpassten Nachrichten bei Verbindungsabbrüchen)
+# verarbeitet wird. Ohne das könnten beide Pfade denselben Checkpoint-Stand
+# lesen, bevor der jeweils andere ihn aktualisiert hat, und dieselbe
+# Nachricht doppelt beantworten.
+_PHONE_LOCKS: dict[str, threading.Lock] = {}
+_PHONE_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(phone: str) -> threading.Lock:
+    with _PHONE_LOCKS_GUARD:
+        return _PHONE_LOCKS.setdefault(phone, threading.Lock())
+
+
 def handle_message(phone: str, message: dict) -> None:
-    text = _extract_text(phone, message)
-    if text is None:
-        return  # ошибка транскрипции уже сообщена пользователю в _extract_text
+    with _lock_for(phone):
+        _handle_message_locked(phone, message)
+
+
+def _mark_processed(phone: str, message_id: str | None, timestamp: int | None) -> None:
+    """
+    Checkpoint für den Nachhol-Sync (siehe app/services/catchup.py) — wird
+    nach JEDEM Verarbeitungsversuch gesetzt, auch wenn dieser intern
+    fehlgeschlagen ist (z.B. Whisper-Fehler in _extract_text), da der Nutzer
+    in solchen Fällen bereits eine Fehlermeldung erhalten hat und der
+    Nachhol-Sync sonst denselben Fehler endlos wiederholen würde.
+    """
+    if message_id:
+        conversation_state.update(
+            phone, last_processed_message_id=message_id, last_processed_message_ts=timestamp,
+        )
+
+
+def _handle_message_locked(phone: str, message: dict) -> None:
+    message_id = message.get("message_id")
+    timestamp = message.get("timestamp")
 
     state = conversation_state.get_or_create(phone)
+    if message_id and message_id == state.get("last_processed_message_id"):
+        # Doppelte Zustellung (erneuter Webhook, oder knappe Überschneidung
+        # mit dem Nachhol-Sync) — nicht nochmal beantworten.
+        logger.info("Nachricht %s für %s bereits verarbeitet — übersprungen.", message_id, phone)
+        return
+
+    text = _extract_text(phone, message)
+    if text is None:
+        _mark_processed(phone, message_id, timestamp)
+        return  # ошибка транскрипции уже сообщена пользователю в _extract_text
 
     if text.strip().lower() in RESET_WORDS and state["state"] != "new":
         conversation_state.update(
@@ -133,6 +177,8 @@ def handle_message(phone: str, message: dict) -> None:
     else:
         logger.warning("Unbekannter Zustand '%s' für %s", current, phone)
         _handle_sales_chat(phone, text, state)
+
+    _mark_processed(phone, message_id, timestamp)
 
 
 def _extract_text(phone: str, message: dict) -> str | None:

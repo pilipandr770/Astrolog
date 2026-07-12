@@ -397,3 +397,75 @@ def test_style_menu_text_extracts_digit_anywhere_in_message():
         mock_state.get_or_create.return_value = {}
         _handle_style("491234567", "Nummer 3 bitte", {})
     mock_state.update.assert_called_once_with("491234567", style="business", state="awaiting_payment")
+
+
+def test_handle_message_skips_already_processed_message_id():
+    state = {"state": "sales_chat", "last_processed_message_id": "MSG1"}
+    message = {"phone": "491234567", "type": "text", "content": "Hallo", "message_id": "MSG1", "timestamp": 100}
+
+    with patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager, "_handle_sales_chat") as mock_sales:
+        mock_state.get_or_create.return_value = state
+        dialog_manager.handle_message("491234567", message)
+
+    mock_sales.assert_not_called()
+    mock_state.update.assert_not_called()
+
+
+def test_handle_message_marks_checkpoint_after_successful_processing():
+    state = {"state": "sales_chat", "last_processed_message_id": "OLD"}
+    message = {"phone": "491234567", "type": "text", "content": "Hallo", "message_id": "NEW", "timestamp": 200}
+
+    with patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager, "_handle_sales_chat") as mock_sales, \
+         patch.object(dialog_manager, "_capture_language_signal"):
+        mock_state.get_or_create.return_value = state
+        dialog_manager.handle_message("491234567", message)
+
+    mock_sales.assert_called_once()
+    mock_state.update.assert_called_once_with(
+        "491234567", last_processed_message_id="NEW", last_processed_message_ts=200
+    )
+
+
+def test_handle_message_marks_checkpoint_even_when_transcription_fails():
+    message = {
+        "phone": "491234567", "type": "audio", "media_url": "https://mmg.whatsapp.net/x.enc",
+        "message_key": {}, "message_id": "MSG-AUDIO", "timestamp": 300,
+    }
+    state = {"state": "sales_chat", "last_processed_message_id": None}
+
+    with patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager.whisper_service, "transcribe_from_base64", side_effect=RuntimeError("boom")):
+        mock_state.get_or_create.return_value = state
+        mock_evo.get_media_base64.side_effect = RuntimeError("boom")
+        dialog_manager.handle_message("491234567", message)
+
+    mock_evo.send_text.assert_called_once()  # Fehlermeldung an den Nutzer
+    mock_state.update.assert_called_once_with(
+        "491234567", last_processed_message_id="MSG-AUDIO", last_processed_message_ts=300
+    )
+
+
+def test_handle_message_without_message_id_does_not_touch_checkpoint():
+    # Abwaertskompatibel: Nachrichten ohne message_id/timestamp (z.B. in
+    # aelteren Tests oder falls Evolution das Feld mal weglaesst) duerfen
+    # keinen Fehler auslösen und der Checkpoint bleibt unangetastet.
+    state = {"state": "sales_chat", "last_processed_message_id": None}
+    message = {"phone": "491234567", "type": "text", "content": "Hallo"}
+
+    with patch.object(dialog_manager, "conversation_state") as mock_state, \
+         patch.object(dialog_manager, "_handle_sales_chat") as mock_sales, \
+         patch.object(dialog_manager, "_capture_language_signal"):
+        mock_state.get_or_create.return_value = state
+        dialog_manager.handle_message("491234567", message)
+
+    mock_sales.assert_called_once()
+    mock_state.update.assert_not_called()
+
+
+def test_lock_for_returns_same_lock_object_for_same_phone():
+    lock1 = dialog_manager._lock_for("491234567")
+    lock2 = dialog_manager._lock_for("491234567")
+    assert lock1 is lock2

@@ -112,7 +112,19 @@ def get_media_base64(message_key: dict) -> dict:
 
 def extract_incoming_message(webhook_payload: dict) -> dict | None:
     """
-    Парсит вебхук от Evolution API в упрощённый формат.
+    Парсит вебхук от Evolution API (или синтетический payload той же формы
+    из app.services.catchup — см. там) в упрощённый формат.
+
+    phone: bevorzugt key.remoteJidAlt (die echte Telefonnummer-JID), falls
+    vorhanden — WhatsApp adressiert manche eingehenden Nachrichten über eine
+    private "LID" (z.B. "33457828802813@lid") statt der Telefonnummer;
+    remoteJidAlt liefert in dem Fall die zugehörige echte Nummer, damit die
+    Nachricht demselben conversation_state-Datensatz zugeordnet wird wie
+    frühere Nachrichten dieses Kontakts (sonst würde fälschlich ein neuer
+    Kontakt/State angelegt).
+
+    message_id/timestamp: für den Nachhol-Sync-Checkpoint (siehe
+    dialog_manager.handle_message, conversations.last_processed_message_ts).
 
     Unbekannte/nicht behandelte Payloads werden NICHT stillschweigend
     verworfen, sondern mit WARNING geloggt (siehe run.py — ohne
@@ -122,10 +134,12 @@ def extract_incoming_message(webhook_payload: dict) -> dict | None:
     diagnostizieren zu können, statt dass der Bot einfach "nicht antwortet".
     """
     try:
-        data = webhook_payload.get("data", {})
-        key = data.get("key", {})
-        message = data.get("message", {})
-        phone = key.get("remoteJid", "").split("@")[0]
+        data = webhook_payload.get("data") or {}
+        key = data.get("key") or {}
+        message = data.get("message") or {}
+        phone = (key.get("remoteJidAlt") or key.get("remoteJid", "")).split("@")[0]
+        message_id = key.get("id")
+        timestamp = data.get("messageTimestamp")
 
         if key.get("fromMe"):
             # Echo der eigenen ausgehenden Nachrichten (Evolution schickt
@@ -133,7 +147,10 @@ def extract_incoming_message(webhook_payload: dict) -> dict | None:
             return None
 
         if "conversation" in message:
-            return {"phone": phone, "type": "text", "content": message["conversation"]}
+            return {
+                "phone": phone, "type": "text", "content": message["conversation"],
+                "message_id": message_id, "timestamp": timestamp,
+            }
 
         if "audioMessage" in message:
             return {
@@ -144,6 +161,7 @@ def extract_incoming_message(webhook_payload: dict) -> dict | None:
                 # get_media_base64() geben (siehe dialog_manager._extract_text).
                 "media_url": message["audioMessage"].get("url"),
                 "message_key": key,
+                "message_id": message_id, "timestamp": timestamp,
             }
 
         logger.warning(
@@ -154,3 +172,29 @@ def extract_incoming_message(webhook_payload: dict) -> dict | None:
     except (KeyError, AttributeError):
         logger.exception("Webhook-Payload konnte nicht geparst werden: %s", str(webhook_payload)[:1500])
         return None
+
+
+def find_chats() -> list[dict]:
+    """
+    Liste aller Chats dieser Instanz (Evolution v2 /chat/findChats) — für
+    app.services.catchup, um beim Nachhol-Sync auch brandneue Kontakte zu
+    entdecken, die conversation_state noch gar nicht kennt.
+    """
+    url = f"{BASE_URL}/chat/findChats/{INSTANCE}"
+    response = requests.post(url, json={}, headers=HEADERS, timeout=30)
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, list) else data.get("chats") or []
+
+
+def find_messages(remote_jid: str, limit: int = 50) -> list[dict]:
+    """
+    Nachrichten-Historie eines einzelnen Chats (Evolution v2
+    /chat/findMessages) — für app.services.catchup.
+    """
+    url = f"{BASE_URL}/chat/findMessages/{INSTANCE}"
+    payload = {"where": {"key": {"remoteJid": remote_jid}}, "limit": limit}
+    response = requests.post(url, json=payload, headers=HEADERS, timeout=30)
+    response.raise_for_status()
+    data = response.json()
+    return (data.get("messages") or {}).get("records") or []

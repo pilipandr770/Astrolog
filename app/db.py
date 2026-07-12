@@ -45,6 +45,13 @@ CREATE TABLE IF NOT EXISTS conversations (
     -- Coach (dritte Rolle) nutzt das, um ehrlich zu wissen, wann die
     -- aktuelle Auswertung "ausläuft", statt zu raten.
     report_calendar_end_date TEXT,
+    -- Checkpoint für den Nachhol-Sync (app/services/catchup.py): Zeitstempel
+    -- (Unix-Sekunden) und Evolution-Message-ID der zuletzt erfolgreich
+    -- verarbeiteten EINGEHENDEN Nachricht dieser Nummer — wird sowohl vom
+    -- Live-Webhook-Pfad als auch vom Nachhol-Sync selbst aktualisiert, damit
+    -- keine Nachricht doppelt verarbeitet wird.
+    last_processed_message_ts INTEGER,
+    last_processed_message_id TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -89,5 +96,7 @@ def init_db():
     _ensure_column(conn, "conversations", "last_interpretation", "TEXT")
     _ensure_column(conn, "conversations", "post_report_chat_history", "TEXT")
     _ensure_column(conn, "conversations", "report_calendar_end_date", "TEXT")
+    _ensure_column(conn, "conversations", "last_processed_message_ts", "INTEGER")
+    _ensure_column(conn, "conversations", "last_processed_message_id", "TEXT")
     conn.commit()
     conn.close()
