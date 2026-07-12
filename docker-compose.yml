@@ -9,6 +9,16 @@ services:
       # Host-Port 5010, da 5000 auf diesem VPS bereits von einem anderen
       # Projekt (autoposter) belegt ist. Container-intern bleibt 5000.
       - "5010:5000"
+    # HTTPS-Subdomain über den bereits laufenden Traefik (siehe traefik-8r2b,
+    # selbes Muster wie evolution-api-6zge) — nötig für den Telegram-Webhook
+    # (Telegram akzeptiert nur HTTPS, das bisherige http://IP:5010 reicht
+    # dafür nicht, siehe app/routes/telegram_webhook.py).
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.astrolog-bot.entrypoints=websecure"
+      - "traefik.http.routers.astrolog-bot.rule=Host(`astrolog-bot.srv1425385.hstgr.cloud`)"
+      - "traefik.http.routers.astrolog-bot.tls.certresolver=letsencrypt"
+      - "traefik.http.services.astrolog-bot.loadbalancer.server.port=5000"
     volumes:
       - ./data:/app/data
       - ./ephe:/app/ephe
