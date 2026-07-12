@@ -25,8 +25,8 @@ from app.models import conversation_state
 from app.services import (
     claude_service,
     dasha,
-    evolution_api,
     jyotish,
+    messaging,
     natal_chart,
     pdf_generator,
     transit_forecast,
@@ -191,7 +191,7 @@ def _generate_and_send_lal_kitab(phone: str, state: dict) -> bool:
             calendar=calendar,
         )
 
-        evolution_api.send_document(
+        messaging.send_document(
             phone,
             pdf_path,
             "Lal-Kitab-Auswertung.pdf",
@@ -200,7 +200,7 @@ def _generate_and_send_lal_kitab(phone: str, state: dict) -> bool:
     except Exception:
         logger.exception("Berichts-Pipeline fehlgeschlagen für %s", phone)
         try:
-            evolution_api.send_text(
+            messaging.send_text(
                 phone,
                 "Bei der Erstellung deines Berichts ist leider ein Fehler "
                 "aufgetreten. Keine Sorge — deine Zahlung ist registriert. "
@@ -279,7 +279,7 @@ def _generate_and_send_jyotish(phone: str, state: dict) -> bool:
             segments=segments,
         )
 
-        evolution_api.send_document(
+        messaging.send_document(
             phone,
             pdf_path,
             "Jyotish-Auswertung.pdf",
@@ -288,7 +288,7 @@ def _generate_and_send_jyotish(phone: str, state: dict) -> bool:
     except Exception:
         logger.exception("Jyotish-Berichts-Pipeline fehlgeschlagen für %s", phone)
         try:
-            evolution_api.send_text(
+            messaging.send_text(
                 phone,
                 "Bei der Erstellung deines Berichts ist leider ein Fehler "
                 "aufgetreten. Keine Sorge — deine Zahlung ist registriert. "

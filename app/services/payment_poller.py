@@ -20,7 +20,7 @@ import time
 
 from app.config import Config
 from app.models import conversation_state
-from app.services import evolution_api, report_generator, stripe_service
+from app.services import messaging, report_generator, stripe_service
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def check_pending_payments() -> None:
             continue
 
         conversation_state.update(phone, paid=1, state="paid")
-        evolution_api.send_text(
+        messaging.send_text(
             phone,
             "Danke für deine Zahlung! Dein Bericht wird jetzt erstellt "
             "und kommt in wenigen Minuten hier an.",

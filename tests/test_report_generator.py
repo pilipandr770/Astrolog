@@ -46,7 +46,7 @@ def test_generate_and_send_report_happy_path(tmp_path):
          patch.object(report_generator.transit_forecast, "pick_highlights", return_value=fake_highlights), \
          patch.object(report_generator.claude_service, "generate_interpretation", return_value="Text") as mock_claude, \
          patch.object(report_generator.pdf_generator, "generate_report_pdf") as mock_pdf, \
-         patch.object(report_generator.evolution_api, "send_document") as mock_doc:
+         patch.object(report_generator.messaging, "send_document") as mock_doc:
         assert report_generator.generate_and_send_report("491234567") is True
 
     # Das volle conversation_state-Dict geht an Claude — language_hint/
@@ -79,7 +79,7 @@ def test_generate_and_send_report_survives_calendar_failure(tmp_path):
          patch.object(report_generator.transit_forecast, "build_monthly_calendar", side_effect=RuntimeError("swe")), \
          patch.object(report_generator.claude_service, "generate_interpretation", return_value="Text") as mock_claude, \
          patch.object(report_generator.pdf_generator, "generate_report_pdf") as mock_pdf, \
-         patch.object(report_generator.evolution_api, "send_document"):
+         patch.object(report_generator.messaging, "send_document"):
         assert report_generator.generate_and_send_report("491234567") is True
 
     assert mock_claude.call_args.kwargs["calendar_highlights"] is None
@@ -115,7 +115,7 @@ def test_generate_and_send_report_marks_approximate_time(tmp_path):
          patch.object(report_generator.transit_forecast, "pick_highlights", return_value={"best": [], "worst": []}), \
          patch.object(report_generator.claude_service, "generate_interpretation", return_value="Text"), \
          patch.object(report_generator.pdf_generator, "generate_report_pdf") as mock_pdf, \
-         patch.object(report_generator.evolution_api, "send_document"):
+         patch.object(report_generator.messaging, "send_document"):
         report_generator.generate_and_send_report("491234567")
 
     assert "~12:00" in mock_pdf.call_args[0][1]["time"]
@@ -125,7 +125,7 @@ def test_generate_and_send_report_failure_keeps_paid_state_and_apologizes():
     with patch.object(report_generator.conversation_state, "get_or_create", return_value=_paid_state()), \
          patch.object(report_generator.conversation_state, "update") as mock_update, \
          patch.object(report_generator.natal_chart, "compute", side_effect=RuntimeError("boom")), \
-         patch.object(report_generator.evolution_api, "send_text") as mock_text:
+         patch.object(report_generator.messaging, "send_text") as mock_text:
         assert report_generator.generate_and_send_report("491234567") is False
 
     mock_update.assert_not_called()  # bleibt "paid" -> Retry bei nächster Nachricht
@@ -204,7 +204,7 @@ def test_generate_and_send_report_dispatches_to_jyotish_path(tmp_path):
          patch.object(report_generator.jyotish, "get_dasha_effect", return_value=fake_effect) as mock_effect, \
          patch.object(report_generator.claude_service, "generate_jyotish_interpretation", return_value="Jyotish-Text") as mock_claude, \
          patch.object(report_generator.pdf_generator, "generate_jyotish_report_pdf") as mock_pdf, \
-         patch.object(report_generator.evolution_api, "send_document") as mock_doc:
+         patch.object(report_generator.messaging, "send_document") as mock_doc:
         assert report_generator.generate_and_send_report("491234567") is True
 
     mock_effect.assert_called_once_with("Sun", "Moon")
@@ -231,7 +231,7 @@ def test_generate_and_send_report_jyotish_fails_beyond_dasha_horizon():
          patch.object(report_generator.conversation_state, "update") as mock_update, \
          patch.object(report_generator.natal_chart, "compute", return_value=_fake_chart_with_moon()), \
          patch.object(report_generator.dasha, "compute_current_dasha", return_value={"mahadasha": None, "antardasha": None}), \
-         patch.object(report_generator.evolution_api, "send_text") as mock_text:
+         patch.object(report_generator.messaging, "send_text") as mock_text:
         assert report_generator.generate_and_send_report("491234567") is False
 
     mock_update.assert_not_called()

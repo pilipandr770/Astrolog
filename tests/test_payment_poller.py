@@ -21,7 +21,7 @@ def test_check_pending_payments_marks_paid_notifies_and_generates_report():
     ), patch(
         "app.services.payment_poller.conversation_state.update"
     ) as mock_update, patch(
-        "app.services.payment_poller.evolution_api.send_text"
+        "app.services.payment_poller.messaging.send_text"
     ) as mock_send, patch(
         "app.services.payment_poller.report_generator.generate_and_send_report"
     ) as mock_report:
@@ -43,7 +43,7 @@ def test_check_pending_payments_skips_unpaid():
     ), patch(
         "app.services.payment_poller.conversation_state.update"
     ) as mock_update, patch(
-        "app.services.payment_poller.evolution_api.send_text"
+        "app.services.payment_poller.messaging.send_text"
     ) as mock_send:
         payment_poller.check_pending_payments()
 
@@ -61,7 +61,7 @@ def test_check_pending_payments_handles_stripe_error_gracefully():
     ), patch(
         "app.services.payment_poller.conversation_state.update"
     ) as mock_update, patch(
-        "app.services.payment_poller.evolution_api.send_text"
+        "app.services.payment_poller.messaging.send_text"
     ) as mock_send:
         payment_poller.check_pending_payments()  # muss NICHT crashen
 
@@ -80,7 +80,7 @@ def test_check_pending_payments_processes_multiple_conversations():
     ), patch(
         "app.services.payment_poller.conversation_state.update"
     ) as mock_update, patch(
-        "app.services.payment_poller.evolution_api.send_text"
+        "app.services.payment_poller.messaging.send_text"
     ) as mock_send, patch(
         "app.services.payment_poller.report_generator.generate_and_send_report"
     ) as mock_report:

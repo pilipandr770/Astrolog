@@ -67,3 +67,11 @@ class Config:
     # Schutz gegen zu häufige Läufe, falls die Verbindung kurz hintereinander
     # mehrfach flattert (mehrere CONNECTION_UPDATE-Events in Folge).
     CATCHUP_MIN_INTERVAL_SECONDS = int(os.getenv("CATCHUP_MIN_INTERVAL_SECONDS", "60"))
+
+    # Telegram als zweiter, unabhängiger Kanal (siehe app/services/telegram_api.py,
+    # app/services/messaging.py) — eigener conversation_state pro Chat-ID
+    # ("tg:<chat_id>"), keine Verknüpfung mit WhatsApp-Kontakten.
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    # Bot-Username ohne "@" (z.B. "MeinAstroBot") — für den t.me-Redirect-Link
+    # nach Stripe Checkout (siehe dialog_manager._payment_redirect_urls()).
+    TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "")

@@ -40,9 +40,11 @@ from app.services import (
     geocoding,
     jyotish,
     message_parser,
+    messaging,
     natal_chart,
     report_generator,
     stripe_service,
+    telegram_api,
     whisper_service,
 )
 
@@ -166,7 +168,7 @@ def _handle_message_locked(phone: str, message: dict) -> None:
         # (erfolgreich) zugestellt — z.B. weil die erste Generierung im
         # Poller fehlgeschlagen ist. Jede Nachricht triggert einen neuen
         # Versuch (report_generator schützt selbst vor Doppel-Läufen).
-        evolution_api.send_text(
+        messaging.send_text(
             phone,
             "Danke für deine Zahlung! Dein Bericht wird gerade erstellt — "
             "das dauert nur ein paar Minuten.",
@@ -187,16 +189,22 @@ def _extract_text(phone: str, message: dict) -> str | None:
 
     if message["type"] == "audio":
         try:
-            # Die Webhook-URL ist E2E-verschlüsselt und direkt unbrauchbar —
-            # das entschlüsselte Audio liefert nur Evolution selbst
-            # (siehe evolution_api.get_media_base64).
-            media = evolution_api.get_media_base64(message["message_key"])
-            result = whisper_service.transcribe_from_base64(
-                media["base64"], media.get("mimetype")
-            )
+            if "file_id" in message:
+                # Telegram: Datei ist unverschlüsselt direkt abrufbar, kein
+                # Entschlüsseln nötig (siehe telegram_api.get_file_download_url).
+                media_url = telegram_api.get_file_download_url(message["file_id"])
+                result = whisper_service.transcribe_from_url(media_url)
+            else:
+                # WhatsApp: die Webhook-URL ist E2E-verschlüsselt und direkt
+                # unbrauchbar — das entschlüsselte Audio liefert nur
+                # Evolution selbst (siehe evolution_api.get_media_base64).
+                media = evolution_api.get_media_base64(message["message_key"])
+                result = whisper_service.transcribe_from_base64(
+                    media["base64"], media.get("mimetype")
+                )
         except Exception:
             logger.exception("Whisper-Transkription fehlgeschlagen für %s", phone)
-            evolution_api.send_text(
+            messaging.send_text(
                 phone,
                 "Ich konnte deine Sprachnachricht leider nicht verstehen. "
                 "Kannst du es bitte als Text senden?",
@@ -238,7 +246,7 @@ def _handle_sales_chat(phone: str, text: str, state: dict) -> None:
         reply_text, ready, method = claude_service.generate_sales_reply(state, history, text)
     except Exception:
         logger.exception("Sales-Chat-Antwort fehlgeschlagen für %s", phone)
-        evolution_api.send_text(
+        messaging.send_text(
             phone,
             "Entschuldige, gerade gab es ein technisches Problem. Kannst du "
             "das bitte noch einmal schreiben?",
@@ -260,8 +268,8 @@ def _handle_sales_chat(phone: str, text: str, state: dict) -> None:
         conversation_state.update(
             phone, state="awaiting_date", sales_chat_history=None, astro_method=method
         )
-        evolution_api.send_text(phone, reply_text)
-        evolution_api.send_text(
+        messaging.send_text(phone, reply_text)
+        messaging.send_text(
             phone,
             "Bitte sende mir dein Geburtsdatum, z. B. 15.05.1990. 🎙 Du kannst "
             "mir übrigens auch eine Sprachnachricht schicken.",
@@ -270,7 +278,7 @@ def _handle_sales_chat(phone: str, text: str, state: dict) -> None:
         conversation_state.update(
             phone, state="sales_chat", sales_chat_history=json.dumps(history)
         )
-        evolution_api.send_text(phone, reply_text)
+        messaging.send_text(phone, reply_text)
 
 
 def _handle_post_report_chat(phone: str, text: str, state: dict) -> None:
@@ -312,7 +320,7 @@ def _handle_post_report_chat(phone: str, text: str, state: dict) -> None:
         )
     except Exception:
         logger.exception("Nachbetreuungs-Antwort fehlgeschlagen für %s", phone)
-        evolution_api.send_text(
+        messaging.send_text(
             phone,
             "Entschuldige, gerade gab es ein technisches Problem. Kannst du "
             "deine Frage bitte noch einmal schreiben?",
@@ -329,11 +337,11 @@ def _handle_post_report_chat(phone: str, text: str, state: dict) -> None:
     history = history[-(MAX_POST_REPORT_HISTORY_TURNS * 2):]
 
     if renew:
-        evolution_api.send_text(phone, reply_text)
+        messaging.send_text(phone, reply_text)
         _handle_renewal(phone, state)
     else:
         conversation_state.update(phone, post_report_chat_history=json.dumps(history))
-        evolution_api.send_text(phone, reply_text)
+        messaging.send_text(phone, reply_text)
 
 
 def _handle_renewal(phone: str, state: dict) -> None:
@@ -361,7 +369,7 @@ def _handle_renewal(phone: str, state: dict) -> None:
 def _handle_date(phone: str, text: str) -> None:
     parsed = message_parser.parse_birth_date(text)
     if parsed is None:
-        evolution_api.send_text(
+        messaging.send_text(
             phone,
             "Entschuldigung, das Datum konnte ich nicht erkennen. "
             "Bitte sende es z. B. so: 15.05.1990 oder '15. Mai 1990'.",
@@ -369,7 +377,7 @@ def _handle_date(phone: str, text: str) -> None:
         return
 
     conversation_state.update(phone, birth_date=parsed.isoformat(), state="awaiting_time")
-    evolution_api.send_text(
+    messaging.send_text(
         phone,
         f"Danke! Geburtsdatum notiert: {parsed.strftime('%d.%m.%Y')}.\n\n"
         "Jetzt brauche ich deine Geburtszeit, z. B. 14:30. Falls du sie nicht "
@@ -380,7 +388,7 @@ def _handle_date(phone: str, text: str) -> None:
 def _handle_time(phone: str, text: str) -> None:
     parsed = message_parser.parse_birth_time(text)
     if parsed is None:
-        evolution_api.send_text(
+        messaging.send_text(
             phone,
             "Ich konnte die Uhrzeit nicht erkennen. Bitte sende sie z. B. so: "
             "14:30, oder schreibe 'weiß nicht', falls du sie nicht kennst.",
@@ -394,7 +402,7 @@ def _handle_time(phone: str, text: str) -> None:
         birth_time_value = f"{hour:02d}:{minute:02d}"
 
     conversation_state.update(phone, birth_time=birth_time_value, state="awaiting_place")
-    evolution_api.send_text(
+    messaging.send_text(
         phone,
         "Perfekt. Zum Schluss: In welcher Stadt (und welchem Land) bist du "
         "geboren? (z. B. 'Frankfurt am Main, Deutschland')",
@@ -405,7 +413,7 @@ def _handle_place(phone: str, text: str) -> None:
     try:
         geo = geocoding.geocode_place(text)
     except ValueError:
-        evolution_api.send_text(
+        messaging.send_text(
             phone,
             f"Ich konnte den Ort '{text.strip()}' leider nicht finden. "
             "Bitte versuche es genauer, z. B. 'Berlin, Deutschland'.",
@@ -413,7 +421,7 @@ def _handle_place(phone: str, text: str) -> None:
         return
     except Exception:
         logger.exception("Geocoding fehlgeschlagen für %s", phone)
-        evolution_api.send_text(
+        messaging.send_text(
             phone,
             "Bei der Suche nach deinem Geburtsort ist ein Fehler aufgetreten. "
             "Bitte versuche es gleich noch einmal.",
@@ -428,7 +436,7 @@ def _handle_place(phone: str, text: str) -> None:
         birth_tz=geo["tz_name"],
         state="awaiting_style",
     )
-    evolution_api.send_text(phone, _style_menu_text())
+    messaging.send_text(phone, _style_menu_text())
 
 
 def _style_menu_text() -> str:
@@ -443,7 +451,7 @@ def _style_menu_text() -> str:
 def _handle_style(phone: str, text: str, state: dict) -> None:
     digit = next((ch for ch in text.strip() if ch in "1234"), None)
     if digit is None:
-        evolution_api.send_text(
+        messaging.send_text(
             phone,
             "Bitte antworte nur mit einer Zahl von 1 bis 4.\n\n" + _style_menu_text(),
         )
@@ -506,7 +514,7 @@ def _send_lal_kitab_teaser(phone: str, state: dict) -> None:
         logger.exception("Teaser-Text-Generierung fehlgeschlagen für %s", phone)
         return
 
-    evolution_api.send_text(phone, teaser_text)
+    messaging.send_text(phone, teaser_text)
 
 
 def _send_jyotish_teaser(phone: str, state: dict) -> None:
@@ -532,22 +540,28 @@ def _send_jyotish_teaser(phone: str, state: dict) -> None:
         logger.exception("Jyotish-Teaser-Text-Generierung fehlgeschlagen für %s", phone)
         return
 
-    evolution_api.send_text(phone, teaser_text)
+    messaging.send_text(phone, teaser_text)
 
 
-def _payment_redirect_urls() -> tuple[str, str]:
+def _payment_redirect_urls(phone: str) -> tuple[str, str]:
     """
     Stripe verlangt gültige success_url/cancel_url, aber ohne eigene
     öffentliche Domain (siehe payment_poller.py) müssen das keine
-    selbst gehosteten Seiten sein — ein wa.me-Link führt den Nutzer direkt
-    zurück in den WhatsApp-Chat. Falls APP_BASE_URL gesetzt ist (z.B. weil
-    doch eine Domain/ein Tunnel eingerichtet wurde), werden stattdessen die
+    selbst gehosteten Seiten sein — ein wa.me-/t.me-Link führt den Nutzer
+    direkt zurück in den jeweiligen Chat (je nach Kanal, siehe
+    messaging.is_telegram()). Falls APP_BASE_URL gesetzt ist (z.B. weil doch
+    eine Domain/ein Tunnel eingerichtet wurde), werden stattdessen die
     Seiten aus routes/payment_pages.py verwendet.
     """
     if Config.APP_BASE_URL:
         return (
             f"{Config.APP_BASE_URL}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
             f"{Config.APP_BASE_URL}/payment/cancel",
+        )
+    if messaging.is_telegram(phone) and Config.TELEGRAM_BOT_USERNAME:
+        return (
+            f"https://t.me/{Config.TELEGRAM_BOT_USERNAME}",
+            f"https://t.me/{Config.TELEGRAM_BOT_USERNAME}",
         )
     return (
         f"https://wa.me/{Config.BOT_WHATSAPP_NUMBER}?text=Zahlung%20abgeschlossen",
@@ -556,13 +570,13 @@ def _payment_redirect_urls() -> tuple[str, str]:
 
 
 def _send_payment_link(phone: str, state: dict, with_summary: bool) -> None:
-    success_url, cancel_url = _payment_redirect_urls()
+    success_url, cancel_url = _payment_redirect_urls(phone)
 
     try:
         session = stripe_service.create_checkout_session(phone, success_url, cancel_url)
     except Exception:
         logger.exception("Stripe-Checkout-Session fehlgeschlagen für %s", phone)
-        evolution_api.send_text(
+        messaging.send_text(
             phone,
             "Bei der Erstellung des Zahlungslinks ist ein Fehler aufgetreten. "
             "Bitte versuche es gleich noch einmal.",
@@ -609,7 +623,7 @@ def _send_payment_message(phone: str, state: dict, checkout_url: str, with_summa
             f"📍 {state['birth_place']}\n\n"
         )
 
-    evolution_api.send_text(
+    messaging.send_text(
         phone,
         f"{summary}Um deine persönliche Lal-Kitab-Auswertung ({Config.REPORT_PRICE_EUR} €) "
         f"zu erhalten, schließe bitte die Zahlung ab:\n{checkout_url}\n\n"

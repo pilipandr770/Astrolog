@@ -30,7 +30,7 @@ def test_payment_redirect_urls_use_wame_by_default(monkeypatch):
     monkeypatch.setattr(Config, "APP_BASE_URL", "")
     monkeypatch.setattr(Config, "BOT_WHATSAPP_NUMBER", "4915123456789")
 
-    success_url, cancel_url = _payment_redirect_urls()
+    success_url, cancel_url = _payment_redirect_urls("491234567")
 
     assert success_url.startswith("https://wa.me/4915123456789")
     assert cancel_url.startswith("https://wa.me/4915123456789")
@@ -41,10 +41,32 @@ def test_payment_redirect_urls_prefer_app_base_url_if_set(monkeypatch):
     monkeypatch.setattr(Config, "APP_BASE_URL", "https://my-domain.example")
     monkeypatch.setattr(Config, "BOT_WHATSAPP_NUMBER", "4915123456789")
 
-    success_url, cancel_url = _payment_redirect_urls()
+    success_url, cancel_url = _payment_redirect_urls("491234567")
 
     assert success_url.startswith("https://my-domain.example/payment/success")
     assert cancel_url == "https://my-domain.example/payment/cancel"
+
+
+def test_payment_redirect_urls_use_tme_for_telegram_contacts(monkeypatch):
+    monkeypatch.setattr(Config, "APP_BASE_URL", "")
+    monkeypatch.setattr(Config, "TELEGRAM_BOT_USERNAME", "MeinAstroBot")
+
+    success_url, cancel_url = _payment_redirect_urls("tg:12345")
+
+    assert success_url == "https://t.me/MeinAstroBot"
+    assert cancel_url == "https://t.me/MeinAstroBot"
+
+
+def test_payment_redirect_urls_falls_back_to_wame_for_telegram_without_username(monkeypatch):
+    # Ohne konfigurierten TELEGRAM_BOT_USERNAME kann kein t.me-Link gebaut
+    # werden -- lieber der (falsche, aber harmlose) wa.me-Fallback als ein Crash.
+    monkeypatch.setattr(Config, "APP_BASE_URL", "")
+    monkeypatch.setattr(Config, "TELEGRAM_BOT_USERNAME", "")
+    monkeypatch.setattr(Config, "BOT_WHATSAPP_NUMBER", "4915123456789")
+
+    success_url, cancel_url = _payment_redirect_urls("tg:12345")
+
+    assert success_url.startswith("https://wa.me/4915123456789")
 
 
 def test_pick_teaser_findings_prefers_moon_and_sun():
@@ -109,7 +131,7 @@ def test_send_jyotish_teaser_computes_dasha_and_sends_text():
     }
     fake_effect = object()
 
-    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+    with patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager.natal_chart, "compute", return_value=fake_chart), \
          patch.object(dialog_manager.dasha, "compute_current_dasha", return_value=fake_current) as mock_dasha, \
          patch.object(dialog_manager.jyotish, "get_dasha_effect", return_value=fake_effect) as mock_effect, \
@@ -119,7 +141,7 @@ def test_send_jyotish_teaser_computes_dasha_and_sends_text():
     mock_dasha.assert_called_once()
     mock_effect.assert_called_once_with("Sun", "Moon")
     mock_gen.assert_called_once_with(state, fake_current["mahadasha"], fake_current["antardasha"], fake_effect)
-    mock_evo.send_text.assert_called_once_with("491234567", "Teaser!")
+    mock_msg.send_text.assert_called_once_with("491234567", "Teaser!")
 
 
 def test_send_jyotish_teaser_skips_silently_beyond_horizon():
@@ -129,14 +151,14 @@ def test_send_jyotish_teaser_skips_silently_beyond_horizon():
     }
     fake_chart = {"positions": {"Moon": {"longitude": 45.0}}, "houses": {}, "findings": []}
 
-    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+    with patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager.natal_chart, "compute", return_value=fake_chart), \
          patch.object(dialog_manager.dasha, "compute_current_dasha", return_value={"mahadasha": None, "antardasha": None}), \
          patch.object(dialog_manager.claude_service, "generate_jyotish_teaser") as mock_gen:
         dialog_manager._send_jyotish_teaser("491234567", state)
 
     mock_gen.assert_not_called()
-    mock_evo.send_text.assert_not_called()
+    mock_msg.send_text.assert_not_called()
 
 
 def test_capture_language_signal_stores_first_sample():
@@ -166,11 +188,11 @@ def test_capture_language_signal_ignores_blank_text():
 
 
 def test_handle_style_reprompts_on_invalid_input():
-    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+    with patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager, "conversation_state") as mock_state:
         _handle_style("491234567", "keine Ahnung", {})
     mock_state.update.assert_not_called()
-    sent_text = mock_evo.send_text.call_args[0][1]
+    sent_text = mock_msg.send_text.call_args[0][1]
     assert "1 bis 4" in sent_text
 
 
@@ -188,7 +210,7 @@ def test_handle_style_accepts_valid_digit_and_proceeds():
 
 
 def test_handle_sales_chat_stays_in_chat_when_not_ready():
-    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+    with patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager.claude_service, "generate_sales_reply") as mock_reply:
         mock_reply.return_value = ("Klar, erzähl mir gern, was dich interessiert!", False, None)
@@ -203,13 +225,13 @@ def test_handle_sales_chat_stays_in_chat_when_not_ready():
         {"role": "user", "content": "Was kostet das denn?"},
         {"role": "assistant", "content": "Klar, erzähl mir gern, was dich interessiert!"},
     ]
-    mock_evo.send_text.assert_called_once_with(
+    mock_msg.send_text.assert_called_once_with(
         "491234567", "Klar, erzähl mir gern, was dich interessiert!"
     )
 
 
 def test_handle_sales_chat_transitions_to_awaiting_date_when_ready():
-    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+    with patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager.claude_service, "generate_sales_reply") as mock_reply:
         mock_reply.return_value = ("Super, dann leg los!", True, "jyotish")
@@ -218,16 +240,16 @@ def test_handle_sales_chat_transitions_to_awaiting_date_when_ready():
     mock_state.update.assert_called_once_with(
         "491234567", state="awaiting_date", sales_chat_history=None, astro_method="jyotish"
     )
-    assert mock_evo.send_text.call_count == 2
-    assert mock_evo.send_text.call_args_list[0][0][1] == "Super, dann leg los!"
-    assert "Geburtsdatum" in mock_evo.send_text.call_args_list[1][0][1]
+    assert mock_msg.send_text.call_count == 2
+    assert mock_msg.send_text.call_args_list[0][0][1] == "Super, dann leg los!"
+    assert "Geburtsdatum" in mock_msg.send_text.call_args_list[1][0][1]
 
 
 def test_handle_sales_chat_passes_existing_history_and_caps_length():
     long_history = [{"role": "user", "content": f"msg{i}"} for i in range(30)]
     state = {"sales_chat_history": json.dumps(long_history)}
 
-    with patch.object(dialog_manager, "evolution_api"), \
+    with patch.object(dialog_manager, "messaging"), \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager.claude_service, "generate_sales_reply") as mock_reply:
         mock_reply.return_value = ("Antwort", False, None)
@@ -239,13 +261,13 @@ def test_handle_sales_chat_passes_existing_history_and_caps_length():
 
 
 def test_handle_sales_chat_handles_claude_error_gracefully():
-    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+    with patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager.claude_service, "generate_sales_reply", side_effect=RuntimeError("boom")):
         _handle_sales_chat("491234567", "Hallo", {})
 
     mock_state.update.assert_not_called()
-    mock_evo.send_text.assert_called_once()
+    mock_msg.send_text.assert_called_once()
 
 
 def test_handle_post_report_chat_uses_stored_interpretation_and_saves_history():
@@ -257,7 +279,7 @@ def test_handle_post_report_chat_uses_stored_interpretation_and_saves_history():
 
     fake_now = datetime(2026, 7, 5, 14, 32, tzinfo=dialog_manager.BERLIN_TZ)
     fake_snapshot = {"date": date(2026, 7, 5), "blocks": []}
-    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+    with patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager, "_now_in_berlin", return_value=fake_now), \
          patch.object(dialog_manager.report_generator, "compute_today_snapshot", return_value=fake_snapshot) as mock_snap, \
@@ -271,7 +293,7 @@ def test_handle_post_report_chat_uses_stored_interpretation_and_saves_history():
         calendar_end_date="2026-08-02", now_str="05.07.2026 14:32 Uhr (Europe/Berlin)",
         today_snapshot=fake_snapshot, today_dasha=None,
     )
-    mock_evo.send_text.assert_called_once_with("491234567", "Das bedeutet, dass...")
+    mock_msg.send_text.assert_called_once_with("491234567", "Das bedeutet, dass...")
     saved_history = json.loads(mock_state.update.call_args[1]["post_report_chat_history"])
     assert saved_history == [
         {"role": "user", "content": "Was bedeutet mein Mondhaus?"},
@@ -289,7 +311,7 @@ def test_handle_post_report_chat_uses_jyotish_snapshot_when_method_selected():
     fake_now = datetime(2026, 7, 5, 14, 32, tzinfo=dialog_manager.BERLIN_TZ)
     fake_dasha_snapshot = {"mahadasha": {"lord": "Sun"}, "antardasha": {"lord": "Moon"}, "effect": None}
 
-    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+    with patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager, "conversation_state"), \
          patch.object(dialog_manager, "_now_in_berlin", return_value=fake_now), \
          patch.object(dialog_manager.report_generator, "compute_today_snapshot") as mock_lk_snap, \
@@ -302,13 +324,13 @@ def test_handle_post_report_chat_uses_jyotish_snapshot_when_method_selected():
     mock_lk_snap.assert_not_called()
     assert mock_reply.call_args.kwargs["today_snapshot"] is None
     assert mock_reply.call_args.kwargs["today_dasha"] == fake_dasha_snapshot
-    mock_evo.send_text.assert_called_once_with("491234567", "Antwort")
+    mock_msg.send_text.assert_called_once_with("491234567", "Antwort")
 
 
 def test_handle_post_report_chat_falls_back_without_stored_report():
     state = {}
 
-    with patch.object(dialog_manager, "evolution_api"), \
+    with patch.object(dialog_manager, "messaging"), \
          patch.object(dialog_manager, "conversation_state"), \
          patch.object(dialog_manager.report_generator, "compute_today_snapshot", return_value=None), \
          patch.object(dialog_manager.claude_service, "generate_post_report_reply") as mock_reply:
@@ -319,14 +341,14 @@ def test_handle_post_report_chat_falls_back_without_stored_report():
 
 
 def test_handle_post_report_chat_handles_claude_error_gracefully():
-    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+    with patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager.report_generator, "compute_today_snapshot", return_value=None), \
          patch.object(dialog_manager.claude_service, "generate_post_report_reply", side_effect=RuntimeError("boom")):
         _handle_post_report_chat("491234567", "Frage", {})
 
     mock_state.update.assert_not_called()
-    mock_evo.send_text.assert_called_once()
+    mock_msg.send_text.assert_called_once()
 
 
 def test_handle_post_report_chat_triggers_renewal_when_customer_agrees():
@@ -335,7 +357,7 @@ def test_handle_post_report_chat_triggers_renewal_when_customer_agrees():
         "last_interpretation": "Bericht-Text", "post_report_chat_history": None,
     }
 
-    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+    with patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager.report_generator, "compute_today_snapshot", return_value=None), \
          patch.object(dialog_manager.claude_service, "generate_post_report_reply") as mock_reply, \
@@ -344,7 +366,7 @@ def test_handle_post_report_chat_triggers_renewal_when_customer_agrees():
         mock_state.get_or_create.return_value = state
         _handle_post_report_chat("491234567", "Ja, mach das bitte", state)
 
-    mock_evo.send_text.assert_called_once_with(
+    mock_msg.send_text.assert_called_once_with(
         "491234567", "Perfekt, ich erstelle dir die Fortsetzung!"
     )
     mock_state.update.assert_called_once_with(
@@ -387,6 +409,28 @@ def test_extract_text_audio_uses_evolution_base64_not_encrypted_url():
     )
     mock_whisper.transcribe_from_url.assert_not_called()
     mock_update.assert_called_once_with("491234567", language_hint="german")
+
+
+def test_extract_text_audio_uses_telegram_direct_url_for_file_id():
+    # Telegram-Sprachnachrichten sind NICHT verschlüsselt -- direkter
+    # Download über telegram_api.get_file_download_url + transcribe_from_url,
+    # nicht über evolution_api.get_media_base64 (das ist WhatsApp-spezifisch).
+    message = {"type": "audio", "file_id": "TGFILE123"}
+    with patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager, "telegram_api") as mock_tg, \
+         patch.object(dialog_manager, "whisper_service") as mock_whisper, \
+         patch.object(dialog_manager.conversation_state, "update") as mock_update:
+        mock_tg.get_file_download_url.return_value = "https://api.telegram.org/file/bot123/voice.ogg"
+        mock_whisper.transcribe_from_url.return_value = {"text": "15.05.1990", "language": "german"}
+        text = dialog_manager._extract_text("tg:12345", message)
+
+    assert text == "15.05.1990"
+    mock_tg.get_file_download_url.assert_called_once_with("TGFILE123")
+    mock_whisper.transcribe_from_url.assert_called_once_with(
+        "https://api.telegram.org/file/bot123/voice.ogg"
+    )
+    mock_evo.get_media_base64.assert_not_called()
+    mock_update.assert_called_once_with("tg:12345", language_hint="german")
 
 
 def test_style_menu_text_extracts_digit_anywhere_in_message():
@@ -437,12 +481,13 @@ def test_handle_message_marks_checkpoint_even_when_transcription_fails():
 
     with patch.object(dialog_manager, "conversation_state") as mock_state, \
          patch.object(dialog_manager, "evolution_api") as mock_evo, \
+         patch.object(dialog_manager, "messaging") as mock_msg, \
          patch.object(dialog_manager.whisper_service, "transcribe_from_base64", side_effect=RuntimeError("boom")):
         mock_state.get_or_create.return_value = state
         mock_evo.get_media_base64.side_effect = RuntimeError("boom")
         dialog_manager.handle_message("491234567", message)
 
-    mock_evo.send_text.assert_called_once()  # Fehlermeldung an den Nutzer
+    mock_msg.send_text.assert_called_once()  # Fehlermeldung an den Nutzer
     mock_state.update.assert_called_once_with(
         "491234567", last_processed_message_id="MSG-AUDIO", last_processed_message_ts=300
     )
